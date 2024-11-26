@@ -3,9 +3,16 @@ import matplotlib.pyplot as plt
 import argparse
 import csv
 import random
-
 from generate_jobs import generate_jobs
 
+######## Global constants ########
+INF = 100000
+
+######## Helper functions ########
+'''
+Acts like a hash function for node IDs.
+It just spits random integers between 10^6 to 10^7 - 1.
+'''
 def get_rand_node_id():
     n = 6
     lower_bound = 10**(n-1)
@@ -23,6 +30,7 @@ def convert_csv_to_dict(path):
     
     return result
 
+##### Classes that encapsulate a state in the SAG ####
 class State:
     def __init__(self, A: list[tuple], X: set, FTI: dict):
         self.A = A
@@ -42,7 +50,7 @@ class StateROS:
     def __repr__(self):
         return f"{self.A}"
 
-
+#### SAG functions for standard WC JLFP ####
 def shortestPathFromSourceToLeaf(G):
     leaves = [node for node in G.nodes if G.out_degree(node) == 0]
     shortest_paths = []
@@ -84,7 +92,6 @@ def ScheduleGraphConstructionAlgorithm(J, m):
             LSTi = min(t_wc, t_high - 1)
 
             if ESTi <= LSTi:
-                print(f"Dispatched {Ji}")
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
                 PA, CA = [], []
@@ -121,6 +128,8 @@ def ScheduleGraphConstructionAlgorithm(J, m):
         P = shortestPathFromSourceToLeaf(G)
     
     return G
+
+#### SAG functions for ROS-flavored WC JLFP ####
 
 def collect_released_jobs(J, J_P, PP):
     R_P = set()
@@ -163,24 +172,42 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
         A2_min = A2[0]
         A2_max = A2[1]
 
-        ##### Modifications for ROS ######
-        R_P, PP = get_R_P(J, J_P, PP)
-        if len(R_P) == 1:
-            PP = A1_min, A1_max
-        ##################################
+        R_P = J.difference(J_P)
+        # ##### Modifications for ROS ######
+        # R_P, PP = get_R_P(J, J_P, PP)
+        # if len(R_P) == 1:
+        #     PP = A1_min, A1_max
+        # ##################################
+
+        ###################################
+        all_r_min = [JDICT[Jx][0] for Jx in J.difference(J_P)]
+
+        jobs_before_pp = 0
+        for j in all_r_min:
+            if j <= PP[1]:
+                jobs_before_pp += 1
+
+        if jobs_before_pp == 0: # If there is no job released before the PP, then a PP will happen at the earliest release of a future job
+            PP = (min(all_r_min), min(all_r_min))
+        ####################################
 
         for Ji in R_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
-            all_Rx_max = [JDICT[Jx][1] for Jx in R_P]
-            rx_max_higher_priority = [JDICT[Jx][1] for Jx in R_P if JDICT[Jx][4] < p_i] 
-            ESTi = max(r_min, A1_min)
+            all_Rx_max = [JDICT[Jx][1] for Jx in R_P if JDICT[Jx][0] <= PP[1]]
+            rx_max_higher_priority = [JDICT[Jx][1] for Jx in R_P if (JDICT[Jx][4] < p_i and JDICT[Jx][0] <= PP[1])] 
+
+            if r_min > PP[1]:
+                ESTi = INF
+            else:
+                ESTi = max(r_min, A1_min) # PP_min coincides with A_min because the moment a core/thread is available, a polling point happen
+            # breakpoint()
 
             t_wc = max(A1_max, min(all_Rx_max, default = INF))
             t_high = min(rx_max_higher_priority, default = INF)
             LSTi = min(t_wc, t_high - 1)
+            # breakpoint()
 
             if ESTi <= LSTi:
-                print(f"Dispatched {Ji}")
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
                 PA, CA = [], []
@@ -208,7 +235,13 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
                         new_FTI[Jx] = v_p.FTI[Jx]
                 new_FTI[Ji] = (EFTi, LFTi)
 
-                new_state = StateROS(new_A, new_X, new_FTI, PP)
+                ############ ROS ##########
+                new_PP = PP
+                if jobs_before_pp == 1:
+                    new_PP = new_A[0]
+                ###########################
+
+                new_state = StateROS(new_A, new_X, new_FTI, new_PP)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state = new_state)
                 G.add_edge(P[-1], new_state_id, job = Ji)
@@ -223,12 +256,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("PATH")
     parser.add_argument("--ROS", action = "store_true")
-    parser.add_argument("end_time", type = int)
+    parser.add_argument("--end_time", default = 0, type = int)
     args = parser.parse_args()
 
-    # Run algorithm with inputs
-    INF = 100000
-    # generate_jobs("tasks.csv", args.PATH, args.end_time, True)
+    if args.end_time > 0:
+        generate_jobs("tasks.csv", args.PATH, args.end_time, True)
+
     JDICT = convert_csv_to_dict(args.PATH)
     list_of_jobs = JDICT.keys()
     J = set(list_of_jobs)
@@ -236,13 +269,13 @@ if __name__ == "__main__":
 
     if args.ROS:
         G = ScheduleGraphConstructionAlgorithmROS(J, m)
+        node_labels = {node: f"{data['state'].A}{data['state'].PP}" for node, data in G.nodes(data=True)}
     else:
         G = ScheduleGraphConstructionAlgorithm(J, m)
+        node_labels = {node: f"{data['state'].A}" for node, data in G.nodes(data=True)}
 
     # Draw
-    node_labels = {node: f"{data['state'].A}{data['state'].PP}" for node, data in G.nodes(data=True)}
     edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
-    # pos = nx.nx_agraph.graphviz_layout(G, prog='dot', args='-Grankdir=LR')
     pos = nx.nx_agraph.graphviz_layout(G, prog='dot')
     nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size = 300)
     nx.draw_networkx_labels(G, pos, labels=node_labels)

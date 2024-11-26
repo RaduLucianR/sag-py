@@ -70,8 +70,8 @@ def get_R_P(J, J_P, PP):
         PP = (min(all_r_min), min(all_r_min))
         R_P = collect_released_jobs(J, J_P, PP)
     
-    return R_P, PP
- 
+    breakpoint()
+    return R_P, PP 
 
 def make_new_state_ROS(J, J_P, A, PP, EFT, LFT):
     m = len(A)
@@ -81,6 +81,7 @@ def make_new_state_ROS(J, J_P, A, PP, EFT, LFT):
 
     if len(R_P) == 1:
         PP = A1_min, A1_max
+        breakpoint()
 
     for Ji in R_P:
         r_min, r_max, C_min, C_max, p_i = J.dict[Ji]
@@ -106,7 +107,7 @@ def make_new_state_ROS(J, J_P, A, PP, EFT, LFT):
             CA.sort()
             print(f"Dispatched {Ji}")
 
-            A_copy = A_copy = [(0, 0) for i in range(m)]
+            A_copy = [(0, 0) for i in range(m)]
 
             for i in range(m):
                 A_copy[i] = (PA[i], CA[i])
@@ -131,7 +132,7 @@ def run(ROS: bool):
         G.add_node(0, name = "Init", A=A)
 
         for i in range(1, 5):
-            print(f"############## State {i + 1} ###############")
+            # print(f"############## State {i + 1} ###############")
             disp_Ji, A = make_new_state(J, J_P, A)
             J_P.add(disp_Ji)
             
@@ -153,7 +154,7 @@ def run(ROS: bool):
         G.add_node(0, name = "Init", A=A, PP=PP)
 
         for i in range(1, 5):
-            print(f"############## State {i + 1} ###############")
+            # print(f"############## State {i + 1} ###############")
             disp_Ji, A, PP = make_new_state_ROS(J, J_P, A, PP, EFT, LFT)
             J_P.add(disp_Ji)
             

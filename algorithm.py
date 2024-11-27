@@ -265,7 +265,9 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
                 new_FTI[Ji] = (EFTi, LFTi)
 
                 ############ ROS ##########
-                new_PP = PP
+                if (jobs_before_pp == 0) or (jobs_before_pp > 1 and PP[0] == PP[1]):
+                    new_PP = PP
+
                 if jobs_before_pp == 1:
                     new_PP = new_A[0]
 

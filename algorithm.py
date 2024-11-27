@@ -100,6 +100,7 @@ def ScheduleGraphConstructionAlgorithm(J, m):
             t_wc = max(A1_max, min(all_Rx_max, default=INF))
             t_high = min(rx_max_higher_priority, default=INF)
             LSTi = min(t_wc, t_high - 1)
+            breakpoint()
 
             if ESTi <= LSTi:
                 EFTi = ESTi + C_min
@@ -133,6 +134,7 @@ def ScheduleGraphConstructionAlgorithm(J, m):
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
+                print(f"Dispatched: {Ji}")
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
@@ -187,11 +189,6 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
         A2_max = A2[1]
 
         R_P = J.difference(J_P)
-        # ##### Modifications for ROS ######
-        # R_P, PP = get_R_P(J, J_P, PP)
-        # if len(R_P) == 1:
-        #     PP = A1_min, A1_max
-        # ##################################
 
         ###################################
         all_r_min = [JDICT[Jx][0] for Jx in J.difference(J_P)]
@@ -203,8 +200,16 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
 
         if (
             jobs_before_pp == 0
-        ):  # If there is no job released before the PP, then a PP will happen at the earliest release of a future job
-            PP = (min(all_r_min), min(all_r_min))
+        ):  # If there is no job released before the previous PP, then the next PP
+            # - potentially happens when 1 core potentially becomes available i.e. A1_min
+            # but only if the job was potentially released before it becomes available
+            # if the job is released after A1_min, then the PP potentially happens at the release time of that job.
+            # - certainly happens when 1 core certainly becomes available i.e. A1_max
+            # but only if the job was certainly released before it becomes available
+            # if the job is released after A1-max, then the PP certainly happens at the relese time of that job.
+            pp_min = max(min(all_r_min), A1_min)
+            pp_max = max(min(all_r_min), A1_max)
+            PP = (pp_min, pp_max)
         ####################################
 
         for Ji in R_P:
@@ -263,6 +268,9 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
                 new_PP = PP
                 if jobs_before_pp == 1:
                     new_PP = new_A[0]
+
+                if jobs_before_pp > 1 and PP[0] != PP[1]:
+                    new_PP = (ESTi, LSTi)
                 ###########################
 
                 new_state = StateROS(new_A, new_X, new_FTI, new_PP)
@@ -270,9 +278,14 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
 
+                BR[Ji] = min(EFTi, BR[Ji])
+                WR[Ji] = max(LFTi, WR[Ji])
+
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
 
+    print("BR:", BR)
+    print("WR:", WR)
     return G
 
 

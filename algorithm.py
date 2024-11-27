@@ -304,8 +304,9 @@ if __name__ == "__main__":
 
     # Draw
     edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
+    plt.figure(figsize=(12, 8))
     pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
     nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size=300)
     nx.draw_networkx_labels(G, pos, labels=node_labels)
     nx.draw_networkx_edge_labels(G, pos, edge_labels)
-    plt.show()
+    plt.savefig("sag.png", dpi=300, bbox_inches="tight")

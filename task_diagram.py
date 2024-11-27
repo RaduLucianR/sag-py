@@ -97,7 +97,9 @@ def draw_time_indicies(y: int):
         )
 
 
-def draw_task(task_number: int, period: int, wcet: int, color: str):
+def draw_task(
+    task_number: int, period: int, jitter: int, bcet: int, wcet: int, color: str
+):
     nrof_jobs = TIMELINE_LENGTH // period
     job_height = 20
     job_style = f"rounded=0;whiteSpace=wrap;html=1;fillColor={color};strokeColor=#6c8ebf;strokeWidth=0;"
@@ -105,19 +107,18 @@ def draw_task(task_number: int, period: int, wcet: int, color: str):
     width = TIME_UNIT * wcet
 
     for i in range(nrof_jobs + 1):
-        x = TIME_UNIT * period * i
+        x = TIME_UNIT * (period * i + jitter)
 
-        if x + width < TIMELINE_LENGTH * TIME_UNIT:
-            job = drawpyo.diagram.object_from_library(
-                page=PAGE,
-                library="general",
-                obj_name="rectangle",
-                value="",
-                width=width,
-                height=job_height,
-                position=(x, job_height + y_offset),
-            )
-            job.apply_style_string(job_style)
+        job = drawpyo.diagram.object_from_library(
+            page=PAGE,
+            library="general",
+            obj_name="rectangle",
+            value="",
+            width=width,
+            height=job_height,
+            position=(x, job_height + y_offset),
+        )
+        job.apply_style_string(job_style)
 
         draw_release_arrow(x, y_offset)
 
@@ -130,9 +131,11 @@ def draw_task(task_number: int, period: int, wcet: int, color: str):
         + str(task_number)
         + r": T="
         + str(period)
-        + r", C="
+        + r", C=["
+        + str(bcet)
+        + r","
         + str(wcet)
-        + r"$$"
+        + r"]$$"
     )
     task_info = drawpyo.diagram.object_from_library(
         page=PAGE,
@@ -141,7 +144,7 @@ def draw_task(task_number: int, period: int, wcet: int, color: str):
         value=task_info_str,
         width=3 * TIME_UNIT,
         height=40,
-        position=(-3 * TIME_UNIT, 15 + y_offset),
+        position=(-3.3 * TIME_UNIT, 15 + y_offset),
     )
 
 
@@ -169,6 +172,8 @@ def generate_diagram(
         draw_task(
             int(task[0]),
             period=int(task[1]),
+            jitter=int(task[2]),
+            bcet=int(task[3]),
             wcet=int(task[4]),
             color=Colors.random_color(),
         )

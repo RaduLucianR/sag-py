@@ -190,47 +190,51 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
 
         R_P = J.difference(J_P)
 
-        ###################################
+        ################ ROS ##############
+        # r_min of all jobs in J / J^P
         all_r_min = [JDICT[Jx][0] for Jx in J.difference(J_P)]
 
-        jobs_before_pp = 0
+        jobs_before_pp = 0  # Number of jobs that are potentially released before a polling point (PP) definitely happens
         for j in all_r_min:
             if j <= PP[1]:
                 jobs_before_pp += 1
 
+        # print(P)
+        # print("Start of iter:", PP)
         if (
             jobs_before_pp == 0
-        ):  # If there is no job released before the previous PP, then the next PP
-            # - potentially happens when 1 core potentially becomes available i.e. A1_min
-            # but only if the job was potentially released before it becomes available
+        ):  # If there is no job released before the previous PP, then the next PP:
+            # - potentially happens when 1 core potentially becomes available i.e. at A1_min
+            # but only if the job was potentially released before the core becomes available
             # if the job is released after A1_min, then the PP potentially happens at the release time of that job.
             # - certainly happens when 1 core certainly becomes available i.e. A1_max
-            # but only if the job was certainly released before it becomes available
+            # but only if the job was certainly released before the core becomes available
             # if the job is released after A1-max, then the PP certainly happens at the relese time of that job.
             pp_min = max(min(all_r_min), A1_min)
             pp_max = max(min(all_r_min), A1_max)
             PP = (pp_min, pp_max)
+
+        E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
+
+        # print("After if:", PP)
         ####################################
 
-        for Ji in R_P:
+        for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
-            all_Rx_max = [JDICT[Jx][1] for Jx in R_P if JDICT[Jx][0] <= PP[1]]
+            all_Rx_max = [JDICT[Jx][1] for Jx in E_P]
             rx_max_higher_priority = [
-                JDICT[Jx][1]
-                for Jx in R_P
-                if (JDICT[Jx][4] < p_i and JDICT[Jx][0] <= PP[1])
+                JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)
             ]
 
-            if (
-                r_min > PP[1]
-            ):  # If the task is released *after* a PP certainly happens, then it cannot be in the wait set
-                ESTi = INF
-            else:
-                ESTi = max(
-                    r_min, A1_min
-                )  # PP_min coincides with A_min because the moment a core/thread is available, a polling point happens
-            # breakpoint()
-
+            # if (
+            #     r_min > PP[1]
+            # ):  # If the task is released *after* a PP certainly happens, then it cannot be in the wait set
+            #     ESTi = INF
+            # else:
+            #     ESTi = max(
+            #         r_min, A1_min
+            #     )  # PP_min coincides with A_min because the moment a core/thread is available, a polling point happens
+            ESTi = max(r_min, A1_min)
             t_wc = max(A1_max, min(all_Rx_max, default=INF))
             t_high = min(rx_max_higher_priority, default=INF)
             LSTi = min(t_wc, t_high - 1)
@@ -265,26 +269,41 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
                 new_FTI[Ji] = (EFTi, LFTi)
 
                 ############ ROS ##########
-                if (jobs_before_pp == 0) or (jobs_before_pp > 1 and PP[0] == PP[1]):
+                # if jobs_before_pp == 0 or (jobs_before_pp > 1 and PP[0] == PP[1]):
+                #     new_PP = PP
+
+                # if jobs_before_pp == 1:
+                #     new_PP = new_A[0]
+
+                # if jobs_before_pp > 1 and PP[0] != PP[1]:
+                #     new_PP = (ESTi, LSTi)
+
+                aux_E_P = E_P.difference(set([Ji]))
+
+                if len(aux_E_P) > 0 and PP[0] == PP[1]:
                     new_PP = PP
 
-                if jobs_before_pp == 1:
-                    new_PP = new_A[0]
-
-                if jobs_before_pp > 1 and PP[0] != PP[1]:
+                if len(aux_E_P) > 0 and PP[0] != PP[1]:
                     new_PP = (ESTi, LSTi)
+
+                if len(aux_E_P) == 0:
+                    new_PP = new_A[0]
                 ###########################
 
                 new_state = StateROS(new_A, new_X, new_FTI, new_PP)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
-
+                # print(f"Dispatched {Ji}")
                 BR[Ji] = min(EFTi, BR[Ji])
                 WR[Ji] = max(LFTi, WR[Ji])
+            else:
+                # print(f"Can't dispatch {Ji}")
+                pass
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
+        # breakpoint()
 
     print("BR:", BR)
     print("WR:", WR)

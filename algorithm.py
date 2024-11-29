@@ -37,6 +37,19 @@ def convert_csv_to_dict(path):
     return result
 
 
+def get_pred(path):
+    global PRED
+    csv_file = open(path, "r")
+    reader = csv.reader(csv_file, delimiter=",")
+
+    for row in reader:
+        key = row[0].strip()  # Get the first column as the key (e.g., "J15")
+        values = set(
+            map(str, row[1:])
+        )  # Convert the remaining columns to strings and make a tuple
+        PRED[key] = values
+
+
 ##### Classes that encapsulate a state in the SAG ####
 class State:
     def __init__(self, A: list[tuple], X: set, FTI: dict):
@@ -81,35 +94,71 @@ def ScheduleGraphConstructionAlgorithm(J, m):
     P = shortestPathFromSourceToLeaf(G)
     while len(P) - 1 < len(J):
         J_P = set([G[u][v]["job"] for u, v in zip(P[:-1], P[1:])])
-        R_P = J.difference(J_P)
+        R_P = set([job for job in J.difference(J_P) if PRED[job].issubset(J_P)])
         v_p = G.nodes[P[-1]]["state"]
-        A1 = v_p.A[0]
+        A = v_p.A
+        X = v_p.X
+        FTI = v_p.FTI
+        A1 = A[0]
         A1_min = A1[0]
         A1_max = A1[1]
 
-        A2 = v_p.A[1]
-        A2_min = A2[0]
-        A2_max = A2[1]
-
         for Ji in R_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
-            all_Rx_max = [JDICT[Jx][1] for Jx in R_P]
-            rx_max_higher_priority = [JDICT[Jx][1] for Jx in R_P if JDICT[Jx][4] < p_i]
-            ESTi = max(r_min, A1_min)
 
-            t_wc = max(A1_max, min(all_Rx_max, default=INF))
-            t_high = min(rx_max_higher_priority, default=INF)
+            def EFT_star(Jx):
+                if Jx in X:
+                    return FTI[Jx][0]  # EFT_x(v_p)
+                else:
+                    return BR[Jx]
+
+            def LFT_star(Jx):
+                if Jx in X:
+                    return FTI[Jx][1]  # LFT_x(v_p)
+                else:
+                    return WR[Jx]
+
+            def th(Jx):
+                rx_max = JDICT[Jx][1]
+                return max(
+                    rx_max,
+                    max(
+                        [LFT_star(Jy) for Jy in PRED[Jx].difference(PRED[Ji])],
+                        default=0,
+                    ),
+                )
+
+            def R_min(Ja):
+                ra_min = JDICT[Ja][0]
+                return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
+
+            def R_max(Ja):
+                ra_max = JDICT[Ja][1]
+                return max(ra_max, max([LFT_star(Jy) for Jy in PRED[Ja]], default=0))
+
+            ESTi = max(R_min(Ji), A1_min)
+            t_wc = max(A1_max, min([R_max(Jb) for Jb in R_P], default=INF))
+            t_high = min([th(Jz) for Jz in R_P if JDICT[Jz][4] < p_i], default=INF)
             LSTi = min(t_wc, t_high - 1)
-            breakpoint()
 
             if ESTi <= LSTi:
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
-                PA, CA = [], []
-                PA.append(max(ESTi, A2_min))
+                PA = [
+                    max(ESTi, A[idx][0]) for idx in range(1, m)
+                ]  # {max{ESTi, A_x_min} | 2 <= x <= m}
+                CA = [
+                    max(ESTi, A[idx][1]) for idx in range(1, m)
+                ]  # {max{ESTi, A_x_max} | 2 <= x <= m}
+
                 PA.append(EFTi)
-                CA.append(max(ESTi, A2_max))
                 CA.append(LFTi)
+
+                for Jc in X.intersection(PRED[Ji]):
+                    LFTc = FTI[Jc][1]
+                    if LSTi < LFTc and LFTc in CA:
+                        CA[CA.index(LFTc)] = LSTi
+
                 PA.sort()
                 CA.sort()
 
@@ -134,7 +183,9 @@ def ScheduleGraphConstructionAlgorithm(J, m):
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
-                print(f"Dispatched: {Ji}")
+
+                BR[Ji] = min(EFTi - r_min, BR[Ji])
+                WR[Ji] = max(LFTi - r_max, WR[Ji])
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
@@ -295,8 +346,8 @@ def ScheduleGraphConstructionAlgorithmROS(J, m):
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
                 # print(f"Dispatched {Ji}")
-                BR[Ji] = min(EFTi, BR[Ji])
-                WR[Ji] = max(LFTi, WR[Ji])
+                BR[Ji] = min(EFTi - r_min, BR[Ji])
+                WR[Ji] = max(LFTi - r_max, WR[Ji])
             else:
                 # print(f"Can't dispatch {Ji}")
                 pass
@@ -315,6 +366,7 @@ if __name__ == "__main__":
     parser.add_argument("PATH")
     parser.add_argument("--ROS", action="store_true")
     parser.add_argument("--end_time", default=0, type=int)
+    parser.add_argument("--pred", default="", type=str)
     args = parser.parse_args()
 
     if args.end_time > 0:
@@ -324,7 +376,12 @@ if __name__ == "__main__":
     JDICT = convert_csv_to_dict(args.PATH)
     list_of_jobs = JDICT.keys()
     J = set(list_of_jobs)
+    PRED = {j: set() for j in list_of_jobs}
     m = 2  # nr of cores
+
+    if args.pred != "":
+        get_pred(args.pred)
+        print(PRED)
 
     if args.ROS:
         G = ScheduleGraphConstructionAlgorithmROS(J, m)

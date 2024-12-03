@@ -120,6 +120,12 @@ if __name__ == "__main__":
     else:
         raise ValueError("The given algorithm option is not available!")
 
+    # Write drawio file from job csv
+    if args.drawio == True:
+        drawio_path = os.path.join(output_folder, "jobs.drawio")
+        generate_diagram(args.PATH, drawio_path)
+        print(f"[SAGPY] Generated drawio file for JOBS at {drawio_path}")
+
     # Write BR and WR to csv
     csv_path = os.path.join(output_folder, "response_times.csv")
     csv_file = open(csv_path, "w+")

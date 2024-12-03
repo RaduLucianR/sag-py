@@ -149,7 +149,7 @@ def draw_task(
         value=task_info_str,
         width=3 * TIME_UNIT,
         height=40,
-        position=(-3.3 * TIME_UNIT, 15 + y_offset),
+        position=(-4 * TIME_UNIT, 15 + y_offset),
     )
 
 
@@ -161,11 +161,11 @@ def split_path(file_path):
 def generate_diagram(
     input_file="tasks.csv",
     output_file="./file.drawio",
-    timeline_length=20,
-    entity="tasks",
+    timeline_length=5,
 ):
     global FILE, PAGE, TIMELINE_LENGTH
 
+    is_task_csv = True
     path, file = split_path(output_file)
     FILE = drawpyo.File()
     FILE.file_path = path
@@ -175,30 +175,82 @@ def generate_diagram(
     fd = open(input_file, "r")
     csv_file = csv.reader(fd)
 
-    max_time_idx = 0
-    for t in csv_file:
-        a = int(t[1])
-        b = int(t[4])
-        n = timeline_length // a
-        max_time_idx = max(a * n + b, max_time_idx)
-    TIMELINE_LENGTH = max_time_idx + 1
-    fd.close()
+    if len(next(csv_file)) == 6:
+        is_task_csv = False
+    fd.seek(0)
 
-    fd = open(input_file, "r")
-    csv_file = csv.reader(fd)
+    if is_task_csv == True:
+        # Set the TIMELINE_LENGTH to the latest finish time of any job and pad it with one more unit
+        max_time_idx = 0
+        for t in csv_file:
+            period = int(t[1])
+            wcet = int(t[4])
+            nrof_jobs = timeline_length // period
+            max_time_idx = max(period * nrof_jobs + wcet, max_time_idx)
+        TIMELINE_LENGTH = max_time_idx + 1
+        fd.seek(0)
 
-    for task in csv_file:
-        nrof_jobs = timeline_length // int(task[1])
-        draw_task(
-            int(task[0]),
-            period=int(task[1]),
-            jitter=int(task[2]),
-            bcet=int(task[3]),
-            wcet=int(task[4]),
-            color=Colors.random_color(),
-            nrof_jobs=nrof_jobs,
-        )
-    fd.close()
+        fd = open(input_file, "r")
+        csv_file = csv.reader(fd)
+
+        for task in csv_file:
+            nrof_jobs = timeline_length // int(task[1])
+            draw_task(
+                int(task[0]),
+                period=int(task[1]),
+                jitter=int(task[2]),
+                bcet=int(task[3]),
+                wcet=int(task[4]),
+                color=Colors.random_color(),
+                nrof_jobs=nrof_jobs,
+            )
+        fd.close()
+    else:
+        tasks = dict()
+
+        # Set the TIMELINE_LENGTH to the latest finish time of any job and pad it with one more unit
+        max_time_idx = 0
+        for j in csv_file:
+            r_min = int(j[1])
+            C_max = int(j[4])
+            max_time_idx = max(r_min + C_max, max_time_idx)
+        TIMELINE_LENGTH = max_time_idx + 1
+        fd.seek(0)
+
+        for job in csv_file:
+            name = job[0]  # Jx_y i.e. yth job of xth task
+            task = int(name[1])
+            job_nr = int(name[3])
+            r_min = int(job[1])
+            r_max = int(job[2])
+            C_min = int(job[3])
+            C_max = int(job[4])
+            jitter = r_max - r_min
+
+            if task not in tasks.keys():
+                tasks[task] = Colors.random_color()
+                draw_task(task, 0, jitter, C_min, C_max, "", -1)
+
+            x = TIME_UNIT * r_min
+            width = TIME_UNIT * C_max
+            job_height = 20
+            y_offset = (task - 1) * (TIME_UNIT * 2)
+            job_style = f"rounded=0;whiteSpace=wrap;html=1;fillColor={tasks[task]};strokeColor=#6c8ebf;strokeWidth=0;"
+
+            job = drawpyo.diagram.object_from_library(
+                page=PAGE,
+                library="general",
+                obj_name="rectangle",
+                value="",
+                width=width,
+                height=job_height,
+                position=(x, job_height + y_offset),
+            )
+            job.apply_style_string(job_style)
+
+            draw_release_arrow(x, y_offset)
+
+        fd.close()
 
     FILE.write()
 
@@ -211,9 +263,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("drawio_file", help="The generated drawio file.")
     parser.add_argument(
-        "latest_job_release_time",
+        "-l",
+        "--latest_job_release_time",
         help="What time is released the last job that you want drawn?",
         type=int,
+        default=5,
     )
     args = parser.parse_args()
 

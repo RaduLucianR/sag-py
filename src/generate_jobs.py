@@ -1,4 +1,5 @@
 import csv
+import argparse
 
 
 def generate_jobs(
@@ -49,3 +50,19 @@ def generate_jobs(
 
     fd.close()
     fd_write.close()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_file")
+    parser.add_argument("output_file")
+    parser.add_argument("latest_release_time")
+    parser.add_argument("--allow-instant-start", action="store_true")
+    args = parser.parse_args()
+
+    generate_jobs(
+        args.input_file,
+        args.output_file,
+        int(args.latest_release_time),
+        args.allow_instant_start,
+    )

@@ -1,13 +1,19 @@
 import csv
 
 
-def generate_jobs(input_path: str, output_path: str, latest_release = 10, allow_instant_start = False):
-    fd = open(input_path, "r")
-    csv_file = csv.reader(fd, delimiter = ",")
+def generate_jobs(
+    input_path: str, output_path: str, latest_release=10, allow_instant_start=False
+):
+    """
+    Generates a csv with jobs information from a given csv file with task information.
 
-    # Format input: TaskName, Period, StartJitter, Cmin, Cmax
-    # Format output: JobName, r_min r_max, C_min, C_max, p
-    # The task priority is the number of the row in the csv
+    Format input: TaskName, Period, StartJitter, Cmin, Cmax
+    Format output: JobName, r_min r_max, C_min, C_max, p
+    The task priority is the index of the row in the csv,
+        i.e. the task's priority is inherent to its position in the csv.
+    """
+    fd = open(input_path, "r")
+    csv_file = csv.reader(fd, delimiter=",")
 
     allow_instant_start = int(allow_instant_start)
     priority = 1
@@ -16,7 +22,7 @@ def generate_jobs(input_path: str, output_path: str, latest_release = 10, allow_
     for task in csv_file:
         if len(task) != 5:
             raise ValueError("Each row must have exactly 5 values!")
-        
+
         if type(task[0]) == int:
             raise ValueError("The name of a task must be an integer!")
 

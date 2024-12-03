@@ -98,9 +98,14 @@ def draw_time_indicies(y: int):
 
 
 def draw_task(
-    task_number: int, period: int, jitter: int, bcet: int, wcet: int, color: str
+    task_number: int,
+    period: int,
+    jitter: int,
+    bcet: int,
+    wcet: int,
+    color: str,
+    nrof_jobs: int,
 ):
-    nrof_jobs = TIMELINE_LENGTH // period
     job_height = 20
     job_style = f"rounded=0;whiteSpace=wrap;html=1;fillColor={color};strokeColor=#6c8ebf;strokeWidth=0;"
     y_offset = (task_number - 1) * (TIME_UNIT * 2)
@@ -154,12 +159,14 @@ def split_path(file_path):
 
 
 def generate_diagram(
-    input_file="tasks.csv", output_file="./file.drawio", timeline_length=20
+    input_file="tasks.csv",
+    output_file="./file.drawio",
+    timeline_length=20,
+    entity="tasks",
 ):
     global FILE, PAGE, TIMELINE_LENGTH
 
     path, file = split_path(output_file)
-    TIMELINE_LENGTH = timeline_length
     FILE = drawpyo.File()
     FILE.file_path = path
     FILE.file_name = file
@@ -168,7 +175,20 @@ def generate_diagram(
     fd = open(input_file, "r")
     csv_file = csv.reader(fd)
 
+    max_time_idx = 0
+    for t in csv_file:
+        a = int(t[1])
+        b = int(t[4])
+        n = timeline_length // a
+        max_time_idx = max(a * n + b, max_time_idx)
+    TIMELINE_LENGTH = max_time_idx + 1
+    fd.close()
+
+    fd = open(input_file, "r")
+    csv_file = csv.reader(fd)
+
     for task in csv_file:
+        nrof_jobs = timeline_length // int(task[1])
         draw_task(
             int(task[0]),
             period=int(task[1]),
@@ -176,7 +196,9 @@ def generate_diagram(
             bcet=int(task[3]),
             wcet=int(task[4]),
             color=Colors.random_color(),
+            nrof_jobs=nrof_jobs,
         )
+    fd.close()
 
     FILE.write()
 
@@ -189,11 +211,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("drawio_file", help="The generated drawio file.")
     parser.add_argument(
-        "timeline_length",
-        help="How long should the timeline be? How many time units should be drawn?",
+        "latest_job_release_time",
+        help="What time is released the last job that you want drawn?",
         type=int,
     )
     args = parser.parse_args()
 
-    generate_diagram(args.csv, args.drawio_file, args.timeline_length)
+    generate_diagram(args.csv, args.drawio_file, args.latest_job_release_time)
     print(f"Generated drawio file at {args.drawio_file}")

@@ -68,11 +68,19 @@ if __name__ == "__main__":
     parser.add_argument("--cores", default=2, type=int)
     parser.add_argument("--output-folder", default="~/.sagpy/")
     parser.add_argument("--drawio", action="store_true")
+    parser.add_argument("--run-name", default="", type=str)
     args = parser.parse_args()
 
     output_folder = os.path.expanduser(args.output_folder)
-    run_name = f"run_{round(time.time())}"
+    run_name = f"run_{round(time.time())}" if args.run_name == "" else args.run_name
     output_folder = os.path.join(output_folder, run_name)
+
+    if os.path.isdir(output_folder):
+        output_folder = os.path.join(output_folder, f"run_{round(time.time())}")
+        print(
+            f"[SAGPY] Output folder already exists! Instead, we're making a new folder at {output_folder}"
+        )
+
     os.makedirs(output_folder)
 
     if args.tasks_end_time > 0:
@@ -124,7 +132,7 @@ if __name__ == "__main__":
     if args.drawio == True:
         drawio_path = os.path.join(output_folder, "jobs.drawio")
         generate_diagram(args.PATH, drawio_path)
-        print(f"[SAGPY] Generated drawio file for JOBS at {drawio_path}")
+        print(f"[SAGPY] Generated drawio file for JOBS at {drawio_path}!")
 
     # Write BR and WR to csv
     csv_path = os.path.join(output_folder, "response_times.csv")

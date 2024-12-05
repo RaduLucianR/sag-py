@@ -14,13 +14,26 @@ class StateROS:
             LFT = Latest Finish TIme
         PP  An interval [PP_min, PP_max] that contains the earliest and the latest
             moments in time when a polling point (PP) could happen
+        NJ  An interval [NJ_min, NJ_max] that contains the earliest and the latest
+            moments in time when there would be no job (NJ) in the wait_set
+        NOJ An integer that represents the number of jobs that exist in the wait_set
     """
 
-    def __init__(self, A: list[tuple], X: set, FTI: dict, PP: tuple[int, int]):
+    def __init__(
+        self,
+        A: list[tuple],
+        X: set,
+        FTI: dict,
+        PP: tuple[int, int],
+        NJ: tuple[int, int],
+        NOJ: int,
+    ):
         self.A = A
         self.X = X
         self.FTI = FTI
         self.PP = PP
+        self.NJ = NJ
+        self.NOJ = NOJ
 
     def __repr__(self):
         return f"{self.A}"
@@ -54,7 +67,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
     G = nx.DiGraph()
     BR = {Ji: INF for Ji in J}
     WR = {Ji: 0 for Ji in J}
-    InitNode = StateROS([(0, 0) for core in range(m)], set(), dict(), (0, 0))
+    InitNode = StateROS([(0, 0) for core in range(m)], set(), dict(), (0, 0), (0, 0), 0)
     G.add_node(0, state=InitNode)
 
     P = shortestPathFromSourceToLeaf(G)
@@ -62,6 +75,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         J_P = set([G[u][v]["job"] for u, v in zip(P[:-1], P[1:])])
         v_p = G.nodes[P[-1]]["state"]
         PP = v_p.PP
+        NJ = v_p.NJ
 
         A1 = v_p.A[0]
         A1_min = A1[0]
@@ -72,11 +86,11 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         A2_max = A2[1]
 
         R_P = J.difference(J_P)
-        print(f"Current state with PP:[{PP[0]}, {PP[1]}]")
-        ################ ROS ##############
-        #                                     r_min <= PP_max
-        E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
+        print(f"Current state with PP:[{PP[0]}, {PP[1]}] and NJ: [{NJ[0]}, {NJ[1]}]")
 
+        ################ ROS ##############
+        # Certainly eligible jobs             r_max <= PP_max
+        E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
         if len(E_P) == 0:
             """
             If there is no job released before the previous PP, then the next PP:
@@ -87,15 +101,20 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
             but only if the job was certainly released before the core becomes available
             if the job is released after A1-max, then the PP certainly happens at the relese time of that job.
             """
-            ERT = min([JDICT[Jw][0] for Jw in R_P])
-            pp_min = max(ERT, A1_min)
-            pp_max = max(ERT, A1_max)
+            # Possibly Released Time, i.e. earliest point in time when a job is POSSIBLY released, i.e. min r_min
+            PRT = min([JDICT[Jw][0] for Jw in R_P])
+
+            # Certainly Released Time, i.e. earliest point in time when a job is CERTAINLY released, i.e. min r_max
+            CRT = min([JDICT[Jw][1] for Jw in R_P])
+
+            pp_min = max(PRT, A1_min)
+            pp_max = max(CRT, A1_max)
             PP = (pp_min, pp_max)
 
         E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
         ####################################
 
-        for Ji in R_P:
+        for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
 
             ESTi = max(r_min, A1_min)
@@ -117,7 +136,9 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 CA.append(LFTi)
                 PA.sort()
                 CA.sort()
-                print(f"Dispatched {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
+                print(
+                    f"Dispatched {Ji} with ESTi = {ESTi} and LSTi = {LSTi}; EFTi = {EFTi} and LFTi = {LFTi}"
+                )
 
                 new_A = [(0, 0) for i in range(m)]
                 for i in range(m):
@@ -138,6 +159,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
 
                 ############ ROS ##########
                 aux_E_P = E_P.difference(set([Ji]))
+                aux_R_P = R_P.difference(set([Ji]))
 
                 if len(aux_E_P) > 0 and PP[0] == PP[1]:
                     new_PP = PP
@@ -146,10 +168,24 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     new_PP = (ESTi, LSTi)
 
                 if len(aux_E_P) == 0:
-                    new_PP = new_A[0]
+                    new_PRT = (
+                        min([JDICT[Jw][0] for Jw in aux_R_P])
+                        if len(aux_R_P) > 0  # This is here just for the end of the SAG
+                        else new_A[0][0]
+                    )
+                    new_CRT = (
+                        min([JDICT[Jw][1] for Jw in aux_R_P])
+                        if len(aux_R_P) > 0  # This is here just for the end of the SAG
+                        else new_A[0][1]
+                    )
+                    new_pp_min = max(new_PRT, new_A[0][0])
+                    new_pp_max = max(new_CRT, new_A[0][1])
+                    new_PP = (new_pp_min, new_pp_max)
+
+                    # new_PP = new_A[0]
                 ###########################
 
-                new_state = StateROS(new_A, new_X, new_FTI, new_PP)
+                new_state = StateROS(new_A, new_X, new_FTI, new_PP, (0, 0), 0)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)

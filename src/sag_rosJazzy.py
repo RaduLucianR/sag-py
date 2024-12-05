@@ -72,45 +72,39 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         A2_max = A2[1]
 
         R_P = J.difference(J_P)
-
+        print(f"Current state with PP:[{PP[0]}, {PP[1]}]")
         ################ ROS ##############
-        all_r_min = [
-            JDICT[Jx][0] for Jx in J.difference(J_P)
-        ]  # r_min of all jobs in J / J^P
+        #                                     r_min <= PP_max
+        E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
 
-        # Number of jobs that are potentially released
-        # before a polling point (PP) definitely happens
-        jobs_before_pp = 0
-        for j in all_r_min:
-            if j <= PP[1]:
-                jobs_before_pp += 1
-
-        if (
-            jobs_before_pp == 0
-        ):  # If there is no job released before the previous PP, then the next PP:
-            # - potentially happens when 1 core potentially becomes available i.e. at A1_min
-            # but only if the job was potentially released before the core becomes available
-            # if the job is released after A1_min, then the PP potentially happens at the release time of that job.
-            # - certainly happens when 1 core certainly becomes available i.e. A1_max
-            # but only if the job was certainly released before the core becomes available
-            # if the job is released after A1-max, then the PP certainly happens at the relese time of that job.
-            pp_min = max(min(all_r_min), A1_min)
-            pp_max = max(min(all_r_min), A1_max)
+        if len(E_P) == 0:
+            """
+            If there is no job released before the previous PP, then the next PP:
+            - potentially happens when 1 core potentially becomes available i.e. at A1_min
+            but only if the job was potentially released before the core becomes available
+            if the job is released after A1_min, then the PP potentially happens at the release time of that job.
+            - certainly happens when 1 core certainly becomes available i.e. A1_max
+            but only if the job was certainly released before the core becomes available
+            if the job is released after A1-max, then the PP certainly happens at the relese time of that job.
+            """
+            ERT = min([JDICT[Jw][0] for Jw in R_P])
+            pp_min = max(ERT, A1_min)
+            pp_max = max(ERT, A1_max)
             PP = (pp_min, pp_max)
 
         E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
         ####################################
 
-        for Ji in E_P:
+        for Ji in R_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
-            all_Rx_max = [JDICT[Jx][1] for Jx in E_P]
-            rx_max_higher_priority = [
-                JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)
-            ]
 
             ESTi = max(r_min, A1_min)
-            t_wc = max(A1_max, min(all_Rx_max, default=INF))
-            t_high = min(rx_max_higher_priority, default=INF)
+            t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in E_P], default=INF))
+            t_high = min(
+                # r_max                         p_x
+                [JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)],
+                default=INF,
+            )
             LSTi = min(t_wc, t_high - 1)
 
             if ESTi <= LSTi:
@@ -123,6 +117,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 CA.append(LFTi)
                 PA.sort()
                 CA.sort()
+                print(f"Dispatched {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
 
                 new_A = [(0, 0) for i in range(m)]
                 for i in range(m):
@@ -161,7 +156,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
                 WR[Ji] = max(LFTi - r_max, WR[Ji])
             else:
-                pass
+                print(f"Cannot dispatch {Ji} because ESTi={ESTi} > LSTi={LSTi}")
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)

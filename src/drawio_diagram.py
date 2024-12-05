@@ -53,6 +53,67 @@ def draw_horizontal_line(x: int, y: int):
     arrow.apply_style_string(line_style)
 
 
+def draw_release_jitter_arrow(x: int, y: int, x_release: int, arrow_length=40):
+    head = drawpyo.diagram.object_from_library(
+        page=PAGE,
+        library="general",
+        obj_name="rectangle",
+        value="",
+        width=0,
+        height=0,
+        position=(x, y),
+    )
+    tail = drawpyo.diagram.object_from_library(
+        page=PAGE,
+        library="general",
+        obj_name="rectangle",
+        value="",
+        width=0,
+        height=0,
+        position=(x, y + arrow_length),
+    )
+
+    dummy_style = "rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=0;"
+    arrow_style = "endArrow=classic;html=1;rounded=0;dashed=1;"
+    dotted_line_style = (
+        "endArrow=none;dashed=1;html=1;dashPattern=1 3;strokeWidth=2;rounded=0;"
+    )
+
+    head.apply_style_string(dummy_style)
+    tail.apply_style_string(dummy_style)
+    arrow = drawpyo.diagram.Edge(
+        page=PAGE,
+        source=tail,
+        target=head,
+    )
+    arrow.apply_style_string(arrow_style)
+
+    head_dotted_line = drawpyo.diagram.object_from_library(
+        page=PAGE,
+        library="general",
+        obj_name="rectangle",
+        value="",
+        width=0,
+        height=0,
+        position=(x_release, y + arrow_length / 2),
+    )
+    tail_dotted_line = drawpyo.diagram.object_from_library(
+        page=PAGE,
+        library="general",
+        obj_name="rectangle",
+        value="",
+        width=0,
+        height=0,
+        position=(x, y + arrow_length / 2),
+    )
+    dotted_line = drawpyo.diagram.Edge(
+        page=PAGE,
+        source=head_dotted_line,
+        target=tail_dotted_line,
+    )
+    dotted_line.apply_style_string(dotted_line_style)
+
+
 def draw_release_arrow(x: int, y: int, arrow_length=40):
     head = drawpyo.diagram.object_from_library(
         page=PAGE,
@@ -112,7 +173,8 @@ def draw_task(
     width = TIME_UNIT * wcet
 
     for i in range(nrof_jobs + 1):
-        x = TIME_UNIT * (period * i + jitter)
+        x = TIME_UNIT * (period * i)
+        x_jitter = x + TIME_UNIT * jitter
 
         job = drawpyo.diagram.object_from_library(
             page=PAGE,
@@ -126,6 +188,9 @@ def draw_task(
         job.apply_style_string(job_style)
 
         draw_release_arrow(x, y_offset)
+
+        if x < x_jitter:
+            draw_release_jitter_arrow(x_jitter, y_offset, x)
 
     draw_horizontal_line(0, 40 + y_offset)
     draw_time_indicies(2 * task_number - 1)
@@ -226,12 +291,14 @@ def generate_diagram(
             C_min = int(job[3])
             C_max = int(job[4])
             jitter = r_max - r_min
+            draw_task_check = False
 
             if task not in tasks.keys():
                 tasks[task] = Colors.random_color()
-                draw_task(task, 0, jitter, C_min, C_max, "", -1)
+                draw_task_check = True
 
             x = TIME_UNIT * r_min
+            x_jitter = x + TIME_UNIT * jitter
             width = TIME_UNIT * C_max
             job_height = 20
             y_offset = (task - 1) * (TIME_UNIT * 2)
@@ -249,6 +316,12 @@ def generate_diagram(
             job.apply_style_string(job_style)
 
             draw_release_arrow(x, y_offset)
+
+            if x < x_jitter:
+                draw_release_jitter_arrow(x_jitter, y_offset, x)
+
+            if draw_task_check == True:
+                draw_task(task, 0, jitter, C_min, C_max, "", -1)
 
         fd.close()
 

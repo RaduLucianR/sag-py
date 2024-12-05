@@ -146,11 +146,20 @@ if __name__ == "__main__":
 
     # Draw SAG and save to file
     edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
-    plt.figure(figsize=(12, 8))
-    pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
-    nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size=300)
-    nx.draw_networkx_labels(G, pos, labels=node_labels)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels)
+    plt.figure(figsize=(20, 15))  # Bigger figure
+    pos = nx.nx_agraph.graphviz_layout(
+        G, prog="dot", args="-Gnodesep=1 -Granksep=2"
+    )  # Adjust spacing
+    nx.draw(
+        G, pos, with_labels=False, node_color="lightblue", node_size=500
+    )  # Increase node size
+    nx.draw_networkx_labels(
+        G, pos, labels=node_labels, font_size=10
+    )  # Smaller font size for labels
+    nx.draw_networkx_edge_labels(
+        G, pos, edge_labels, font_size=8
+    )  # Smaller edge label font
     fig_path = os.path.join(output_folder, "sag.png")
     plt.savefig(fig_path, dpi=300, bbox_inches="tight")
+
     print(f"[SAGPY] SAG figure saved at {fig_path}!")

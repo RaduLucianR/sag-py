@@ -90,8 +90,8 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
 
         ################ ROS ##############
         # Certainly eligible jobs             r_max <= PP_max
-        E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
-        if len(E_P) == 0:
+        C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
+        if len(C_E_P) == 0:
             """
             If there is no job released before the previous PP, then the next PP:
             - potentially happens when 1 core potentially becomes available i.e. at A1_min
@@ -111,16 +111,20 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
             pp_max = max(CRT, A1_max)
             PP = (pp_min, pp_max)
 
-        E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
+        # Certainly eligible jobs                r_max <= PP_max
+        C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
+        # Possibly eligible jobs                r_min <= PP_max
+        P_E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
+        E_P = P_E_P if PP[0] < PP[1] else C_E_P
         ####################################
-
+        print(f"Starting loop for C_E_P = {C_E_P}, P_E_P = {P_E_P}")
         for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
 
             ESTi = max(r_min, A1_min)
             t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in E_P], default=INF))
             t_high = min(
-                # r_max                         p_x
+                # r_max                                p_x
                 [JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)],
                 default=INF,
             )
@@ -181,8 +185,6 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     new_pp_min = max(new_PRT, new_A[0][0])
                     new_pp_max = max(new_CRT, new_A[0][1])
                     new_PP = (new_pp_min, new_pp_max)
-
-                    # new_PP = new_A[0]
                 ###########################
 
                 new_state = StateROS(new_A, new_X, new_FTI, new_PP, (0, 0), 0)

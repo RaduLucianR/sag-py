@@ -74,6 +74,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
     while len(P) - 1 < len(J):
         J_P = set([G[u][v]["job"] for u, v in zip(P[:-1], P[1:])])
         v_p = G.nodes[P[-1]]["state"]
+        parent_state = G.nodes[P[-2]]["state"] if v_p != InitNode else None
         PP = v_p.PP
         NJ = v_p.NJ
 
@@ -90,33 +91,44 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
 
         ################ ROS ##############
         # Certainly eligible jobs             r_max <= PP_max
+        old_PP = PP
         C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
         if len(C_E_P) == 0:
-            """
-            If there is no job released before the previous PP, then the next PP:
-            - potentially happens when 1 core potentially becomes available i.e. at A1_min
-            but only if the job was potentially released before the core becomes available
-            if the job is released after A1_min, then the PP potentially happens at the release time of that job.
-            - certainly happens when 1 core certainly becomes available i.e. A1_max
-            but only if the job was certainly released before the core becomes available
-            if the job is released after A1-max, then the PP certainly happens at the relese time of that job.
-            """
-            # Possibly Released Time, i.e. earliest point in time when a job is POSSIBLY released, i.e. min r_min
             PRT = min([JDICT[Jw][0] for Jw in R_P])
-
-            # Certainly Released Time, i.e. earliest point in time when a job is CERTAINLY released, i.e. min r_max
             CRT = min([JDICT[Jw][1] for Jw in R_P])
-
             pp_min = max(PRT, A1_min)
             pp_max = max(CRT, A1_max)
             PP = (pp_min, pp_max)
+            print("wtf")
 
         # Certainly eligible jobs                r_max <= PP_max
         C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
         # Possibly eligible jobs                r_min <= PP_max
         P_E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
-        E_P = P_E_P if PP[0] < PP[1] else C_E_P
+
+        # One of the two
+        if PP[0] < PP[1]:
+            E_P = P_E_P
+        elif PP[0] == PP[1]:
+            # The wait_set is C_E_P by now if all cores were busy and there were still sufficiently many jobs in the wait_set for all cores.
+            # If the PP == A_m(previous state) then a PP certainly happened when all cores certainly became available,
+            # so it means that there were not sufficient jobs in the wait_set to satisfy all cores.
+            # Thus, we need to check whether the PP in this state was triggered by one of the cores which had no job to do.
+            core_triggered_current_pp = False
+
+            if parent_state != None:
+                if parent_state.A[m - 1] == PP:
+                    core_triggered_current_pp = True
+
+            if core_triggered_current_pp:
+                E_P = P_E_P  # Then it might be that potentially released job are brought to the wait_set
+            else:
+                E_P = C_E_P  # Then the PP was triggered beforehand, so the wait_set is NOT yet empty
         ####################################
+        if old_PP == PP:
+            print(f"The PP remained {old_PP}")
+        else:
+            print(f"The PP changed from {old_PP} to {PP}")
         print(f"Starting loop for C_E_P = {C_E_P}, P_E_P = {P_E_P}")
         for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
@@ -185,6 +197,10 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     new_pp_min = max(new_PRT, new_A[0][0])
                     new_pp_max = max(new_CRT, new_A[0][1])
                     new_PP = (new_pp_min, new_pp_max)
+
+                print(
+                    f"After dispatching {Ji} after state with PP: {PP}; the C_E_P is {C_E_P}, the P_E_P is {P_E_P} and the E_P is {E_P} | The new PP is {new_PP} because |aux_E_P| = {len(aux_E_P)}"
+                )
                 ###########################
 
                 new_state = StateROS(new_A, new_X, new_FTI, new_PP, (0, 0), 0)

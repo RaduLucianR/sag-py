@@ -42,11 +42,11 @@ def edge_match(e1, e2):
     return e1["job"] == e2["job"]
 
 
-def SAG_match(jobs, expected_graph):
+def SAG_match(jobs, expected_graph, cores):
     assert os.path.isfile(jobs) == True
     assert os.path.isfile(expected_graph) == True
 
-    inputs = get_inputs(jobs, 2)
+    inputs = get_inputs(jobs, cores)
     G1 = ScheduleGraphConstructionAlgorithmROS(*inputs)[0]
     G2 = get_output(expected_graph)
     matcher = DiGraphMatcher(G1, G2, node_match=node_match, edge_match=edge_match)
@@ -69,6 +69,24 @@ def get_test_cases():
     return test_cases
 
 
-@pytest.mark.parametrize("input_file, output_file", get_test_cases())
-def test_ScheduleGraphConstructionAlgorithmROS(input_file, output_file):
-    assert SAG_match(input_file, output_file)
+# @pytest.mark.parametrize("input_file, output_file", get_test_cases())
+# def tests_two_cores(input_file, output_file):
+#     assert SAG_match(input_file, output_file, 2)
+
+
+def tests1():
+    assert SAG_match(
+        "test/tests_sag_ros/test1/jobs.csv", "test/tests_sag_ros/test1/sag.pkl", 2
+    )
+
+
+def tests2():
+    assert SAG_match(
+        "test/tests_sag_ros/test2/jobs.csv", "test/tests_sag_ros/test2/sag.pkl", 2
+    )
+
+
+def tests3():
+    assert SAG_match(
+        "test/tests_sag_ros/test3/jobs.csv", "test/tests_sag_ros/test3/sag.pkl", 3
+    )

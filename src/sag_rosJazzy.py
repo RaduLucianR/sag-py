@@ -75,16 +75,14 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         J_P = set([G[u][v]["job"] for u, v in zip(P[:-1], P[1:])])
         v_p = G.nodes[P[-1]]["state"]
         parent_state = G.nodes[P[-2]]["state"] if v_p != InitNode else None
+        last_dispatched_job = G[P[-2]][P[-1]]["job"] if v_p != InitNode else ""
         PP = v_p.PP
         NJ = v_p.NJ
+        A = v_p.A
 
-        A1 = v_p.A[0]
+        A1 = A[0]
         A1_min = A1[0]
         A1_max = A1[1]
-
-        A2 = v_p.A[1]
-        A2_min = A2[0]
-        A2_max = A2[1]
 
         R_P = J.difference(J_P)
         print(f"Current state with PP:[{PP[0]}, {PP[1]}] and NJ: [{NJ[0]}, {NJ[1]}]")
@@ -101,35 +99,51 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
             PP = (pp_min, pp_max)
             print("wtf")
 
+        E_P = set()  # Set that contains the eligible jobs for dispatch from this state.
         # Certainly eligible jobs                r_max <= PP_max
         C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
         # Possibly eligible jobs                r_min <= PP_max
         P_E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
 
         # One of the two
-        if PP[0] < PP[1]:
+        if (
+            PP[0] < PP[1]
+        ):  # Then it's uncertain when a polling point happened, so we must consider all jobs that *could* be in the wait_set.
             E_P = P_E_P
-        elif PP[0] == PP[1]:
-            # The wait_set is C_E_P by now if all cores were busy and there were still sufficiently many jobs in the wait_set for all cores.
-            # If the PP == A_m(previous state) then a PP certainly happened when all cores certainly became available,
-            # so it means that there were not sufficient jobs in the wait_set to satisfy all cores.
-            # Thus, we need to check whether the PP in this state was triggered by one of the cores which had no job to do.
-            core_triggered_current_pp = False
+        elif PP[0] == PP[1]:  # PP definitely happened at PP[0] == PP[1]
+            E_P = C_E_P
 
+            """
+            The wait_set is C_E_P by now if all cores were busy and there were still sufficiently many jobs in the wait_set for all cores.
+            If the PP == A_m(previous state) then a PP certainly happened when all cores certainly became available,
+            so it means that there were not sufficient jobs in the wait_set to satisfy all cores.
+            Thus, we need to check whether the PP in this state was triggered by one of the cores which had no job to do.
+            """
             if parent_state != None:
                 if parent_state.A[m - 1] == PP:
-                    core_triggered_current_pp = True
+                    E_P = P_E_P
 
-            if core_triggered_current_pp:
-                E_P = P_E_P  # Then it might be that potentially released job are brought to the wait_set
-            else:
-                E_P = C_E_P  # Then the PP was triggered beforehand, so the wait_set is NOT yet empty
+            """
+            At this point a PP certainly happened sometime in the past, but we don't know what jobs are certainly in the wait_set.
+            However, since a PP certainly happened then the last released job was the highest priority job in the wait_set.
+            So the job on the graph-edge that brought us to this current state, was certainly the highest priority job in the wait_set.
+            Then, from this state we cannot dispatch jobs with a higher priority than the one just dispatched, because they weren't added to the wait_set.
+            [Somehow explain why we use P_E_P when all jobs in P_E_P are lower priority than last dispatched job and
+             v_p(PP) == v_p'(PP) (i.e. the PP is unchanged)]
+            """
+            if parent_state != None:
+                if parent_state.PP != PP:
+                    all_possible_jobs_lower_priority_than_last_job = True
+
+                    for Jv in P_E_P:
+                        if JDICT[Jv][4] < JDICT[last_dispatched_job][4]:
+                            all_possible_jobs_lower_priority_than_last_job = False
+                            break
+
+                    if all_possible_jobs_lower_priority_than_last_job == True:
+                        E_P = P_E_P
         ####################################
-        if old_PP == PP:
-            print(f"The PP remained {old_PP}")
-        else:
-            print(f"The PP changed from {old_PP} to {PP}")
-        print(f"Starting loop for C_E_P = {C_E_P}, P_E_P = {P_E_P}")
+
         for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
 
@@ -145,10 +159,14 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
             if ESTi <= LSTi:
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
-                PA, CA = [], []
-                PA.append(max(ESTi, A2_min))
+                PA = [
+                    max(ESTi, A[idx][0]) for idx in range(1, m)
+                ]  # {max{ESTi, A_x_min} | 2 <= x <= m}
+                CA = [
+                    max(ESTi, A[idx][1]) for idx in range(1, m)
+                ]  # {max{ESTi, A_x_max} | 2 <= x <= m}
+
                 PA.append(EFTi)
-                CA.append(max(ESTi, A2_max))
                 CA.append(LFTi)
                 PA.sort()
                 CA.sort()

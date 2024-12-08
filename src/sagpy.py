@@ -122,7 +122,7 @@ if __name__ == "__main__":
     elif args.algorithm == "ROS":
         G, BR, WR = ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED)
         node_labels = {
-            node: f"{data['state'].A}{data['state'].PP}"
+            node: f"{data['state'].A}{data['state'].PP}{data['state'].PP2}"
             for node, data in G.nodes(data=True)
         }
     else:

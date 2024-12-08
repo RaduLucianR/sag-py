@@ -14,8 +14,6 @@ class StateROS:
             LFT = Latest Finish TIme
         PP  An interval [PP_min, PP_max] that contains the earliest and the latest
             moments in time when a polling point (PP) could happen
-        NJ  An interval [NJ_min, NJ_max] that contains the earliest and the latest
-            moments in time when there would be no job (NJ) in the wait_set
         NOJ An integer that represents the number of jobs that exist in the wait_set
     """
 
@@ -25,14 +23,14 @@ class StateROS:
         X: set,
         FTI: dict,
         PP: tuple[int, int],
-        NJ: tuple[int, int],
+        PP2: tuple[int, int],
         NOJ: int,
     ):
         self.A = A
         self.X = X
         self.FTI = FTI
         self.PP = PP
-        self.NJ = NJ
+        self.PP2 = PP2
         self.NOJ = NOJ
 
     def __repr__(self):
@@ -77,7 +75,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         parent_state = G.nodes[P[-2]]["state"] if v_p != InitNode else None
         last_dispatched_job = G[P[-2]][P[-1]]["job"] if v_p != InitNode else ""
         PP = v_p.PP
-        NJ = v_p.NJ
+        PP2 = v_p.PP2
         A = v_p.A
 
         A1 = A[0]
@@ -85,8 +83,6 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         A1_max = A1[1]
 
         R_P = J.difference(J_P)
-        print(f"Current state with PP:[{PP[0]}, {PP[1]}] and NJ: [{NJ[0]}, {NJ[1]}]")
-
         ################ ROS ##############
         old_PP = PP
         # Certainly eligible jobs             r_max <= PP_max
@@ -108,6 +104,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
         # Possibly eligible jobs                r_min <= PP_max
         P_E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
+        P_LP_E = set()
 
         # One of the two
         if (
@@ -145,25 +142,58 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
 
                     if all_possible_jobs_lower_priority_than_last_job == True:
                         E_P = P_E_P
+                elif parent_state.PP == PP:
+                    if PP == parent_state.A[0]:
+                        all_possible_jobs_lower_priority_than_last_job = True
+
+                        for Jv in P_E_P:
+                            if JDICT[Jv][4] < JDICT[last_dispatched_job][4]:
+                                all_possible_jobs_lower_priority_than_last_job = False
+
+                        if all_possible_jobs_lower_priority_than_last_job == True:
+                            E_P = P_E_P
 
         if parent_state != None:
-            if parent_state.PP == old_PP and old_PP[0] == old_PP[1]:
+            if parent_state.PP == PP2 and PP2[0] == PP2[1]:
                 P_LP_E = set(
                     [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[last_dispatched_job][4]]
                 )
-                E_P = P_LP_E
         ####################################
+
+        print(
+            f"Current state with A: {A}, PP:[{PP[0]}, {PP[1]}] and PP2: [{PP2[0]}, {PP2[1]}]; after dispatching {last_dispatched_job}."
+        )
+        print(f"We have E_P={E_P}, P_E_P={P_E_P}, C_E_P={C_E_P}, P_LP_E={P_LP_E}")
 
         for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
 
             ESTi = max(r_min, A1_min)
-            t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in E_P], default=INF))
-            t_high = min(
-                # r_max                                p_x
-                [JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)],
-                default=INF,
-            )
+            LSTi = 0
+
+            if Ji not in P_LP_E:
+                if (PP[0] == PP[1]) and (Ji in C_E_P):
+                    t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in C_E_P], default=INF))
+                    t_high = min(
+                        # r_max                                p_x
+                        [JDICT[Jx][1] for Jx in C_E_P if (JDICT[Jx][4] < p_i)],
+                        default=INF,
+                    )
+                else:
+                    t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in E_P], default=INF))
+                    t_high = min(
+                        # r_max                                p_x
+                        [JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)],
+                        default=INF,
+                    )
+            else:
+                t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in P_LP_E], default=INF))
+                t_high = min(
+                    # r_max                                p_x
+                    [JDICT[Jx][1] for Jx in P_LP_E if (JDICT[Jx][4] < p_i)],
+                    default=INF,
+                )
+
             LSTi = min(t_wc, t_high - 1)
 
             if ESTi <= LSTi:
@@ -202,12 +232,25 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 new_FTI[Ji] = (EFTi, LFTi)
 
                 ############ ROS ##########
-                new_PP = (0, 0)
-                aux_E_P = E_P.difference(set([Ji]))
+                new_PP = PP
+                new_PP2 = (-1, -1)
+                aux_E_P = (
+                    E_P.difference(set([Ji]))
+                    if Ji not in P_LP_E
+                    else P_LP_E.difference(set[Ji])
+                )
                 aux_R_P = R_P.difference(set([Ji]))
 
                 if len(aux_E_P) > 0 and PP[0] == PP[1]:
                     new_PP = PP
+
+                    # if Ji not in P_LP_E:
+                    #     aux_P_LP_E = set(
+                    #         [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[Ji][4]]
+                    #     )
+
+                    #     if len(aux_P_LP_E) > 0:
+                    #         new_PP2 = PP
 
                 if len(aux_E_P) > 0 and PP[0] != PP[1]:
                     new_PP = (ESTi, LSTi)
@@ -227,24 +270,17 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     new_pp_max = max(new_CRT, new_A[0][1])
                     new_PP = (new_pp_min, new_pp_max)
 
-                    # All potentially eligible jobs with lower priority than Ji
-                    """
-                    Lower priority jobs might be in the wait_set depending on their release time.
-                    If they are in the wait_set then they were brought in the wait_set with the same polling point as Ji,
-                    so we must dispatch Ji and keep the polling point fixed.
-                    """
-                    P_LP_E = set([Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[Ji][4]])
-                    if len(P_LP_E) > 0:
-                        new_state = StateROS(new_A, new_X, new_FTI, PP, (0, 0), 0)
-                        new_state_id = get_rand_node_id()
-                        G.add_node(new_state_id, state=new_state)
-                        G.add_edge(P[-1], new_state_id, job=Ji)
+                    aux_P_LP_E = set(
+                        [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[Ji][4]]
+                    )
+                    if len(aux_P_LP_E) > 0:
+                        new_PP2 = PP
 
                 print(
                     f"After dispatching {Ji} after state with PP: {PP}; the C_E_P is {C_E_P}, the P_E_P is {P_E_P} and the E_P is {E_P} | The new PP is {new_PP} because |aux_E_P| = {len(aux_E_P)}"
                 )
 
-                new_state = StateROS(new_A, new_X, new_FTI, new_PP, (0, 0), 0)
+                new_state = StateROS(new_A, new_X, new_FTI, new_PP, new_PP2, 0)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
@@ -252,7 +288,9 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
                 WR[Ji] = max(LFTi - r_max, WR[Ji])
             else:
-                print(f"Cannot dispatch {Ji} because ESTi={ESTi} > LSTi={LSTi}")
+                print(
+                    f"Cannot dispatch {Ji} after state with A: {A}, PP:[{PP[0]}, {PP[1]}] and PP2: [{PP2[0]}, {PP2[1]}], because ESTi={ESTi} > LSTi={LSTi}"
+                )
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)

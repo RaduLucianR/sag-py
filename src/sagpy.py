@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     # Draw SAG and save to file
     edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
-    plt.figure(figsize=(20, 15))  # Bigger figure
+    plt.figure(figsize=(30, 25))  # Bigger figure
     pos = nx.nx_agraph.graphviz_layout(
         G, prog="dot", args="-Gnodesep=1 -Granksep=2"
     )  # Adjust spacing

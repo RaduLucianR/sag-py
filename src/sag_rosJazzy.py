@@ -88,8 +88,8 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
         print(f"Current state with PP:[{PP[0]}, {PP[1]}] and NJ: [{NJ[0]}, {NJ[1]}]")
 
         ################ ROS ##############
-        # Certainly eligible jobs             r_max <= PP_max
         old_PP = PP
+        # Certainly eligible jobs             r_max <= PP_max
         C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
         if len(C_E_P) == 0:
             PRT = min([JDICT[Jw][0] for Jw in R_P])
@@ -97,7 +97,11 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
             pp_min = max(PRT, A1_min)
             pp_max = max(CRT, A1_max)
             PP = (pp_min, pp_max)
-            print("wtf")
+
+        if old_PP != PP:
+            print(f"The PP changed from {old_PP} to {PP}; we are in state with A = {A}")
+        else:
+            print(f"The PP is the same, i.e. {PP}; we are in state with A = {A}")
 
         E_P = set()  # Set that contains the eligible jobs for dispatch from this state.
         # Certainly eligible jobs                r_max <= PP_max
@@ -138,10 +142,16 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     for Jv in P_E_P:
                         if JDICT[Jv][4] < JDICT[last_dispatched_job][4]:
                             all_possible_jobs_lower_priority_than_last_job = False
-                            break
 
                     if all_possible_jobs_lower_priority_than_last_job == True:
                         E_P = P_E_P
+
+        if parent_state != None:
+            if parent_state.PP == old_PP and old_PP[0] == old_PP[1]:
+                P_LP_E = set(
+                    [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[last_dispatched_job][4]]
+                )
+                E_P = P_LP_E
         ####################################
 
         for Ji in E_P:
@@ -192,6 +202,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 new_FTI[Ji] = (EFTi, LFTi)
 
                 ############ ROS ##########
+                new_PP = (0, 0)
                 aux_E_P = E_P.difference(set([Ji]))
                 aux_R_P = R_P.difference(set([Ji]))
 
@@ -216,15 +227,28 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     new_pp_max = max(new_CRT, new_A[0][1])
                     new_PP = (new_pp_min, new_pp_max)
 
+                    # All potentially eligible jobs with lower priority than Ji
+                    """
+                    Lower priority jobs might be in the wait_set depending on their release time.
+                    If they are in the wait_set then they were brought in the wait_set with the same polling point as Ji,
+                    so we must dispatch Ji and keep the polling point fixed.
+                    """
+                    P_LP_E = set([Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[Ji][4]])
+                    if len(P_LP_E) > 0:
+                        new_state = StateROS(new_A, new_X, new_FTI, PP, (0, 0), 0)
+                        new_state_id = get_rand_node_id()
+                        G.add_node(new_state_id, state=new_state)
+                        G.add_edge(P[-1], new_state_id, job=Ji)
+
                 print(
                     f"After dispatching {Ji} after state with PP: {PP}; the C_E_P is {C_E_P}, the P_E_P is {P_E_P} and the E_P is {E_P} | The new PP is {new_PP} because |aux_E_P| = {len(aux_E_P)}"
                 )
-                ###########################
 
                 new_state = StateROS(new_A, new_X, new_FTI, new_PP, (0, 0), 0)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=Ji)
+                ###########################
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
                 WR[Ji] = max(LFTi - r_max, WR[Ji])
             else:

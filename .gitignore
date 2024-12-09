@@ -1,1 +1,5 @@
 __pycache__
+notes.md
+output.txt
+.pytest_cache
+dist

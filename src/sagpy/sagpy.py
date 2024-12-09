@@ -12,7 +12,8 @@ from drawio_diagram import generate_diagram
 from utils import *
 from sag_algorithms import ALGORITHMS
 
-if __name__ == "__main__":
+
+def sagpy():
     # Command-Line Tool setup
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -182,3 +183,7 @@ if __name__ == "__main__":
     logger.info(f"Saving SAG as PNG...")
     plt.savefig(fig_path, dpi=300, bbox_inches="tight")
     logger.info(f"SAG figure saved at {fig_path}!")
+
+
+if __name__ == "__main__":
+    sagpy()

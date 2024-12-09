@@ -1,4 +1,31 @@
-[tool.pytest.ini_options]
-pythonpath = [
-  ".", "src"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[project]
+name = "sagpy"
+version = "0.0.1"
+authors = [
+  { name = "Radu Lucian Radulescu", email = "radlucradulescu@gmail.com" },
 ]
+description = "Implementation of the Schedule-Abstraction Graph (SAG) in Python."
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: Unix",
+]
+
+dependencies = ["networkx==3.4.2", "drawpyo==0.2.1", "matplotlib==3.6.3"]
+
+[project.urls]
+Homepage = "https://github.com/RaduLucianR/sag-py"
+Issues = "https://github.com/RaduLucianR/sag-py/issues"
+
+[project.scripts]
+sagpy = "sagpy:sagpy"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]

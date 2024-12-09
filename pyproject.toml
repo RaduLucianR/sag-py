@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sagpy"
-version = "0.0.1"
+version = "0.0.11"
 authors = [
   { name = "Radu Lucian Radulescu", email = "radlucradulescu@gmail.com" },
 ]
@@ -18,14 +18,22 @@ classifiers = [
   "Operating System :: Unix",
 ]
 
-dependencies = ["networkx==3.4.2", "drawpyo==0.2.1", "matplotlib==3.6.3"]
+dependencies = [
+  "networkx>=3.4.2",
+  "drawpyo>=0.2.1",
+  "matplotlib>=3.6.3",
+  "tqdm>=4.66.6",
+]
+
+[tool.hatch.build.targets.sdist]
+packages = ["src/sagpy", "src/sagpy/sag_algorithms"]
 
 [project.urls]
 Homepage = "https://github.com/RaduLucianR/sag-py"
 Issues = "https://github.com/RaduLucianR/sag-py/issues"
 
 [project.scripts]
-sagpy = "sagpy:sagpy"
+sagpy = "sagpy.sagpy:main"
 
 [tool.pytest.ini_options]
 pythonpath = [".", "src"]

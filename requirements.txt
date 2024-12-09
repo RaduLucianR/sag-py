@@ -1,3 +1,4 @@
 networkx==3.4.2
 drawpyo==0.2.1
 matplotlib==3.6.3
+tqdm==4.66.6

@@ -1,7 +1,7 @@
 import networkx as nx
 import random
 import logging
-from sag_template import sag_algorithm
+from sagpy.sag_template import sag_algorithm
 
 
 ######## Utility functions #######

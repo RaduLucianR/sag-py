@@ -10,7 +10,7 @@ You can visit the official repository [here](https://github.com/SAG-org/schedule
 ### Run example
 1. Clone the repository and run the `sagpy.py` script on a `csv` file that contains a set of jobs. A job is a tuple: `(name, r_min, r_max, C_min, C_max, p)`. The SAG for regular JLFP WC schedulers is run by default. Use the `--ROS` flag to run the SAG for the ROS2 executor with (by default) 2 threads. The algorithm prints to console the best response times and worst response times for the given jobs, and makes a `png` image with the constructed SAG so you can see exactly the state-transition system.
 ```
-python3 sag_cli.py examples/input_examples/job_sets/mitra_example.csv --ROS
+python3 -m src.sagpy.sagpy examples/input_examples/job_sets/ex_meeting.csv --algorithm ros
 ```
 
 Output files are by default generated in the `~/USER/.sagpy` folder.

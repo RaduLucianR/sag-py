@@ -217,10 +217,3 @@ def is_pred_set_csv(path: str) -> bool:
                 )
 
     return True
-
-
-# get_job_dict2("/home/radu/repos/rtas2019/src/fig1a.csv")
-# get_pred2("/home/radu/repos/rtas2019/src/fig1a.prec.csv")
-get_job_dict(
-    "/home/radu/repos/rtas2019/examples/input_examples/job_sets/ex_meeting.csv"
-)

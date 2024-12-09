@@ -7,13 +7,13 @@ import os
 import pickle
 import logging
 
-from generate_jobs import generate_jobs
-from drawio_diagram import generate_diagram
-from utils import *
-from sag_algorithms import ALGORITHMS
+from sagpy.generate_jobs import generate_jobs
+from sagpy.drawio_diagram import generate_diagram
+from sagpy.utils import *
+from sagpy.sag_algorithms import ALGORITHMS
 
 
-def sagpy():
+def main():
     # Command-Line Tool setup
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -186,4 +186,4 @@ def sagpy():
 
 
 if __name__ == "__main__":
-    sagpy()
+    main()

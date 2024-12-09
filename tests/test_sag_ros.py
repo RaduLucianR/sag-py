@@ -3,8 +3,8 @@ import pickle
 import pytest
 import logging
 
-from src.sagpy.sag_algorithms.ros import ScheduleGraphConstructionAlgorithmROS
-from src.sagpy.utils import *
+from sagpy.sag_algorithms.ros import ScheduleGraphConstructionAlgorithmROS
+from sagpy.utils import *
 
 from networkx.algorithms.isomorphism import DiGraphMatcher
 

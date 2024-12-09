@@ -2,7 +2,7 @@ import networkx as nx
 import random
 import logging
 import tqdm
-from sag_template import sag_algorithm
+from sagpy.sag_template import sag_algorithm
 
 
 class StateROS:

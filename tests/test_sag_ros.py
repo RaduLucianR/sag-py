@@ -86,6 +86,8 @@ def get_test_cases():
 # def tests_two_cores(input_file, output_file):
 #     assert SAG_match(input_file, output_file, 2)
 
+THIS_DIR = os.path.dirname(__file__)
+
 
 def tests1():
     """
@@ -93,7 +95,9 @@ def tests1():
     No release time variation.
     """
     assert SAG_match(
-        "tests/tests_sag_ros/test1/jobs.csv", "tests/tests_sag_ros/test1/sag.pkl", 2
+        f"{THIS_DIR}/tests_sag_ros/test1/jobs.csv",
+        f"{THIS_DIR}/tests_sag_ros/test1/sag.pkl",
+        2,
     )
 
 
@@ -102,7 +106,9 @@ def tests2():
     Release time variation. Lower priority job can release before or at the same time as higher priority job.
     """
     assert SAG_match(
-        "tests/tests_sag_ros/test2/jobs.csv", "tests/tests_sag_ros/test2/sag.pkl", 2
+        f"{THIS_DIR}/tests_sag_ros/test2/jobs.csv",
+        f"{THIS_DIR}/tests_sag_ros/test2/sag.pkl",
+        2,
     )
 
 
@@ -111,7 +117,9 @@ def tests3():
     Overlapping release intervals, both high and low priority big release intervals.
     """
     assert SAG_match(
-        "tests/tests_sag_ros/test3/jobs.csv", "tests/tests_sag_ros/test3/sag.pkl", 3
+        f"{THIS_DIR}/tests_sag_ros/test3/jobs.csv",
+        f"{THIS_DIR}/tests_sag_ros/test3/sag.pkl",
+        3,
     )
 
 
@@ -120,8 +128,8 @@ def tests4():
     Basic precedence constraint test. Chain of jobs: J1_1 triggers J8_2 triggers J9_3
     """
     assert SAG_match(
-        "tests/tests_sag_ros/test4/jobs.csv",
-        "tests/tests_sag_ros/test4/sag.pkl",
+        f"{THIS_DIR}/tests_sag_ros/test4/jobs.csv",
+        f"{THIS_DIR}/tests_sag_ros/test4/sag.pkl",
         2,
-        "tests/tests_sag_ros/test4/pred.csv",
+        f"{THIS_DIR}/tests_sag_ros/test4/pred.csv",
     )

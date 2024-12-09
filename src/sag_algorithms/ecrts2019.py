@@ -130,6 +130,7 @@ def ScheduleGraphConstructionAlgorithm(
                 for Jc in X.intersection(PRED[Ji]):
                     LFTc = FTI[Jc][1]
                     if LSTi < LFTc and LFTc in CA:
+                        # TODO: Check if CA.index(LFTc) is correct here
                         CA[CA.index(LFTc)] = LSTi
 
                 PA.sort()

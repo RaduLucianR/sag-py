@@ -132,7 +132,13 @@ if __name__ == "__main__":
     m = args.cores
 
     if args.pred != "":
-        get_pred2(args.pred)
+        try:
+            aux_PRED = get_pred2(args.pred)
+        except:
+            aux_PRED = get_pred(args.pred)
+
+        for k in aux_PRED.keys():
+            PRED[k] = aux_PRED[k]
 
     # Run the SAG algorithm
     algorithm = ALGORITHMS.get(args.algorithm)
@@ -154,6 +160,7 @@ if __name__ == "__main__":
         pickle_path = os.path.join(output_folder, "graph.pkl")
         with open(pickle_path, "wb+") as f:
             pickle.dump(G, f)
+        logger.info(f"Saved SAG as pickle at {pickle_path}")
 
     # Write BR and WR to csv
     csv_path = os.path.join(output_folder, "response_times.csv")

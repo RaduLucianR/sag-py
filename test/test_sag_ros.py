@@ -25,9 +25,12 @@ def get_inputs(jobs_path, cores, pred_path=""):
 
     if pred_path != "":
         try:
-            PRED = get_pred2(pred_path)
+            aux_PRED = get_pred2(pred_path)
         except:
-            PRED = get_pred(pred_path)
+            aux_PRED = get_pred(pred_path)
+
+        for k in aux_PRED.keys():
+            PRED[k] = aux_PRED[k]
 
     return J, cores, JDICT, PRED
 
@@ -50,11 +53,11 @@ def edge_match(e1, e2):
     return e1["job"] == e2["job"]
 
 
-def SAG_match(jobs, expected_graph, cores):
+def SAG_match(jobs, expected_graph, cores, pred=""):
     assert os.path.isfile(jobs) == True
     assert os.path.isfile(expected_graph) == True
 
-    inputs = get_inputs(jobs, cores)
+    inputs = get_inputs(jobs, cores) if pred == "" else get_inputs(jobs, cores, pred)
     G1 = ScheduleGraphConstructionAlgorithmROS(
         *inputs, logger=logging.Logger("SAGPY", logging.CRITICAL)
     )[0]
@@ -85,18 +88,40 @@ def get_test_cases():
 
 
 def tests1():
+    """
+    3 jobs in a critical instance, then 2 jobs realesed while the others are in the wait_set.
+    No release time variation.
+    """
     assert SAG_match(
         "test/tests_sag_ros/test1/jobs.csv", "test/tests_sag_ros/test1/sag.pkl", 2
     )
 
 
 def tests2():
+    """
+    Release time variation. Lower priority job can release before or at the same time as higher priority job.
+    """
     assert SAG_match(
         "test/tests_sag_ros/test2/jobs.csv", "test/tests_sag_ros/test2/sag.pkl", 2
     )
 
 
 def tests3():
+    """
+    Overlapping release intervals, both high and low priority big release intervals.
+    """
     assert SAG_match(
         "test/tests_sag_ros/test3/jobs.csv", "test/tests_sag_ros/test3/sag.pkl", 3
+    )
+
+
+def tests4():
+    """
+    Basic precedence constraint test. Chain of jobs: J1_1 triggers J8_2 triggers J9_3
+    """
+    assert SAG_match(
+        "test/tests_sag_ros/test4/jobs.csv",
+        "test/tests_sag_ros/test4/sag.pkl",
+        2,
+        "test/tests_sag_ros/test4/pred.csv",
     )

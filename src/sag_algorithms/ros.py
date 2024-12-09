@@ -88,12 +88,15 @@ def ScheduleGraphConstructionAlgorithmROS(
         PP = v_p.PP
         PP2 = v_p.PP2
         A = v_p.A
+        X = v_p.X
+        FTI = v_p.FTI
 
         A1 = A[0]
         A1_min = A1[0]
         A1_max = A1[1]
 
-        R_P = J.difference(J_P)
+        # R_P = J.difference(J_P)
+        R_P = set([job for job in J.difference(J_P) if PRED[job].issubset(J_P)])
         ################ ROS ##############
         old_PP = PP
         C_E_P = set([Ji for Ji in R_P if JDICT[Ji]["r_max"] <= PP[1]])
@@ -183,6 +186,7 @@ def ScheduleGraphConstructionAlgorithmROS(
             f"We have E_P={E_P}, P_E_P={P_E_P}, C_E_P={C_E_P}, P_LP_E={P_LP_E}"
         )
 
+        ############ ITERATE OVER JOBS ##############
         for Ji in E_P:
             r_min = JDICT[Ji]["r_min"]
             r_max = JDICT[Ji]["r_max"]
@@ -190,33 +194,57 @@ def ScheduleGraphConstructionAlgorithmROS(
             C_max = JDICT[Ji]["C_max"]
             p_i = JDICT[Ji]["p"]
 
-            ESTi = max(r_min, A1_min)
+            ############ Define aux functions #############
+            def EFT_star(Jx):
+                if Jx in X:
+                    return FTI[Jx][0]  # EFT_x(v_p)
+                else:
+                    return BR[Jx]
+
+            def LFT_star(Jx):
+                if Jx in X:
+                    return FTI[Jx][1]  # LFT_x(v_p)
+                else:
+                    return WR[Jx]
+
+            def th(Jx):
+                rx_max = JDICT[Jx]["r_max"]
+                return max(
+                    rx_max,
+                    max(
+                        [LFT_star(Jy) for Jy in PRED[Jx].difference(PRED[Ji])],
+                        default=0,
+                    ),
+                )
+
+            def R_min(Ja):
+                ra_min = JDICT[Ja]["r_min"]
+                return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
+
+            def R_max(Ja):
+                ra_max = JDICT[Ja]["r_max"]
+                return max(ra_max, max([LFT_star(Jy) for Jy in PRED[Ja]], default=0))
+
+            ############## END AUX FUNCTIONS #################
+
+            ESTi = max(R_min(Ji), A1_min)
             LSTi = 0
 
             if Ji not in P_LP_E:
                 if (PP[0] == PP[1]) and (Ji in C_E_P):
-                    t_wc = max(
-                        A1_max, min([JDICT[Jx]["r_max"] for Jx in C_E_P], default=INF)
-                    )
+                    t_wc = max(A1_max, min([R_max(Jb) for Jb in C_E_P], default=INF))
                     t_high = min(
-                        [JDICT[Jx]["r_max"] for Jx in C_E_P if (JDICT[Jx]["p"] < p_i)],
-                        default=INF,
+                        [th(Jz) for Jz in C_E_P if JDICT[Jz]["p"] < p_i], default=INF
                     )
                 else:
-                    t_wc = max(
-                        A1_max, min([JDICT[Jx]["r_max"] for Jx in E_P], default=INF)
-                    )
+                    t_wc = max(A1_max, min([R_max(Jb) for Jb in E_P], default=INF))
                     t_high = min(
-                        [JDICT[Jx]["r_max"] for Jx in E_P if (JDICT[Jx]["p"] < p_i)],
-                        default=INF,
+                        [th(Jz) for Jz in E_P if JDICT[Jz]["p"] < p_i], default=INF
                     )
             else:
-                t_wc = max(
-                    A1_max, min([JDICT[Jx]["r_max"] for Jx in P_LP_E], default=INF)
-                )
+                t_wc = max(A1_max, min([R_max(Jb) for Jb in P_LP_E], default=INF))
                 t_high = min(
-                    [JDICT[Jx]["r_max"] for Jx in P_LP_E if (JDICT[Jx]["p"] < p_i)],
-                    default=INF,
+                    [th(Jz) for Jz in P_LP_E if JDICT[Jz]["p"] < p_i], default=INF
                 )
 
             LSTi = min(t_wc, t_high - 1)
@@ -233,6 +261,13 @@ def ScheduleGraphConstructionAlgorithmROS(
 
                 PA.append(EFTi)
                 CA.append(LFTi)
+
+                for Jc in X.intersection(PRED[Ji]):
+                    LFTc = FTI[Jc][1]
+                    if LSTi < LFTc and LFTc in CA:
+                        # TODO: Check if CA.index(LFTc) is correct here
+                        CA[CA.index(LFTc)] = LSTi
+
                 PA.sort()
                 CA.sort()
                 logger.debug(
@@ -268,14 +303,6 @@ def ScheduleGraphConstructionAlgorithmROS(
 
                 if len(aux_E_P) > 0 and PP[0] == PP[1]:
                     new_PP = PP
-
-                    # if Ji not in P_LP_E:
-                    #     aux_P_LP_E = set(
-                    #         [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[Ji][4]]
-                    #     )
-
-                    #     if len(aux_P_LP_E) > 0:
-                    #         new_PP2 = PP
 
                 if len(aux_E_P) > 0 and PP[0] != PP[1]:
                     new_PP = (ESTi, LSTi)

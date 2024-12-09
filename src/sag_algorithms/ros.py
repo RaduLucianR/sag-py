@@ -96,11 +96,10 @@ def ScheduleGraphConstructionAlgorithmROS(
         R_P = J.difference(J_P)
         ################ ROS ##############
         old_PP = PP
-        # Certainly eligible jobs             r_max <= PP_max
-        C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
+        C_E_P = set([Ji for Ji in R_P if JDICT[Ji]["r_max"] <= PP[1]])
         if len(C_E_P) == 0:
-            PRT = min([JDICT[Jw][0] for Jw in R_P])
-            CRT = min([JDICT[Jw][1] for Jw in R_P])
+            PRT = min([JDICT[Jw]["r_min"] for Jw in R_P])
+            CRT = min([JDICT[Jw]["r_max"] for Jw in R_P])
             pp_min = max(PRT, A1_min)
             pp_max = max(CRT, A1_max)
             PP = (pp_min, pp_max)
@@ -114,9 +113,9 @@ def ScheduleGraphConstructionAlgorithmROS(
 
         E_P = set()  # Set that contains the eligible jobs for dispatch from this state.
         # Certainly eligible jobs                r_max <= PP_max
-        C_E_P = set([Ji for Ji in R_P if JDICT[Ji][1] <= PP[1]])
+        C_E_P = set([Ji for Ji in R_P if JDICT[Ji]["r_max"] <= PP[1]])
         # Possibly eligible jobs                r_min <= PP_max
-        P_E_P = set([Ji for Ji in R_P if JDICT[Ji][0] <= PP[1]])
+        P_E_P = set([Ji for Ji in R_P if JDICT[Ji]["r_min"] <= PP[1]])
         P_LP_E = set()
 
         # One of the two
@@ -150,7 +149,7 @@ def ScheduleGraphConstructionAlgorithmROS(
                     all_possible_jobs_lower_priority_than_last_job = True
 
                     for Jv in P_E_P:
-                        if JDICT[Jv][4] < JDICT[last_dispatched_job][4]:
+                        if JDICT[Jv]["p"] < JDICT[last_dispatched_job]["p"]:
                             all_possible_jobs_lower_priority_than_last_job = False
 
                     if all_possible_jobs_lower_priority_than_last_job == True:
@@ -160,7 +159,7 @@ def ScheduleGraphConstructionAlgorithmROS(
                         all_possible_jobs_lower_priority_than_last_job = True
 
                         for Jv in P_E_P:
-                            if JDICT[Jv][4] < JDICT[last_dispatched_job][4]:
+                            if JDICT[Jv]["p"] < JDICT[last_dispatched_job]["p"]:
                                 all_possible_jobs_lower_priority_than_last_job = False
 
                         if all_possible_jobs_lower_priority_than_last_job == True:
@@ -169,7 +168,11 @@ def ScheduleGraphConstructionAlgorithmROS(
         if parent_state != None:
             if parent_state.PP == PP2 and PP2[0] == PP2[1]:
                 P_LP_E = set(
-                    [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[last_dispatched_job][4]]
+                    [
+                        Jk
+                        for Jk in P_E_P
+                        if JDICT[Jk]["p"] > JDICT[last_dispatched_job]["p"]
+                    ]
                 )
         ####################################
 
@@ -181,31 +184,38 @@ def ScheduleGraphConstructionAlgorithmROS(
         )
 
         for Ji in E_P:
-            r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
+            r_min = JDICT[Ji]["r_min"]
+            r_max = JDICT[Ji]["r_max"]
+            C_min = JDICT[Ji]["C_min"]
+            C_max = JDICT[Ji]["C_max"]
+            p_i = JDICT[Ji]["p"]
 
             ESTi = max(r_min, A1_min)
             LSTi = 0
 
             if Ji not in P_LP_E:
                 if (PP[0] == PP[1]) and (Ji in C_E_P):
-                    t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in C_E_P], default=INF))
+                    t_wc = max(
+                        A1_max, min([JDICT[Jx]["r_max"] for Jx in C_E_P], default=INF)
+                    )
                     t_high = min(
-                        # r_max                                p_x
-                        [JDICT[Jx][1] for Jx in C_E_P if (JDICT[Jx][4] < p_i)],
+                        [JDICT[Jx]["r_max"] for Jx in C_E_P if (JDICT[Jx]["p"] < p_i)],
                         default=INF,
                     )
                 else:
-                    t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in E_P], default=INF))
+                    t_wc = max(
+                        A1_max, min([JDICT[Jx]["r_max"] for Jx in E_P], default=INF)
+                    )
                     t_high = min(
-                        # r_max                                p_x
-                        [JDICT[Jx][1] for Jx in E_P if (JDICT[Jx][4] < p_i)],
+                        [JDICT[Jx]["r_max"] for Jx in E_P if (JDICT[Jx]["p"] < p_i)],
                         default=INF,
                     )
             else:
-                t_wc = max(A1_max, min([JDICT[Jx][1] for Jx in P_LP_E], default=INF))
+                t_wc = max(
+                    A1_max, min([JDICT[Jx]["r_max"] for Jx in P_LP_E], default=INF)
+                )
                 t_high = min(
-                    # r_max                                p_x
-                    [JDICT[Jx][1] for Jx in P_LP_E if (JDICT[Jx][4] < p_i)],
+                    [JDICT[Jx]["r_max"] for Jx in P_LP_E if (JDICT[Jx]["p"] < p_i)],
                     default=INF,
                 )
 
@@ -272,12 +282,12 @@ def ScheduleGraphConstructionAlgorithmROS(
 
                 if len(aux_E_P) == 0:
                     new_PRT = (
-                        min([JDICT[Jw][0] for Jw in aux_R_P])
+                        min([JDICT[Jw]["r_min"] for Jw in aux_R_P])
                         if len(aux_R_P) > 0  # This is here just for the end of the SAG
                         else new_A[0][0]
                     )
                     new_CRT = (
-                        min([JDICT[Jw][1] for Jw in aux_R_P])
+                        min([JDICT[Jw]["r_max"] for Jw in aux_R_P])
                         if len(aux_R_P) > 0  # This is here just for the end of the SAG
                         else new_A[0][1]
                     )
@@ -286,7 +296,7 @@ def ScheduleGraphConstructionAlgorithmROS(
                     new_PP = (new_pp_min, new_pp_max)
 
                     aux_P_LP_E = set(
-                        [Jk for Jk in P_E_P if JDICT[Jk][4] > JDICT[Ji][4]]
+                        [Jk for Jk in P_E_P if JDICT[Jk]["p"] > JDICT[Ji]["p"]]
                     )
                     if len(aux_P_LP_E) > 0:
                         new_PP2 = PP

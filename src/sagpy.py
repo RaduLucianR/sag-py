@@ -9,7 +9,7 @@ import logging
 
 from generate_jobs import generate_jobs
 from drawio_diagram import generate_diagram
-from utils import get_job_dict, get_pred
+from utils import *
 from sag_algorithms import ALGORITHMS
 
 if __name__ == "__main__":
@@ -48,11 +48,32 @@ if __name__ == "__main__":
         choices=["info", "debug", "disable"],
         type=str,
     )
-    parser.add_argument("--pred", default="", type=str)
-    parser.add_argument("--cores", default=2, type=int)
-    parser.add_argument("--drawio", action="store_true")
-    parser.add_argument("--pickle", action="store_true")
-    parser.add_argument("--tasks_end_time", default=0, type=int)
+    parser.add_argument(
+        "--pred", help="Path to csv with predecessor constraints", default="", type=str
+    )
+    parser.add_argument(
+        "--cores",
+        help="Number of cores that the SAG algorithm should consider for analysis.",
+        default=2,
+        type=int,
+    )
+    parser.add_argument(
+        "--drawio",
+        help="Set it to generate a drawio file with the task/job-release pattern.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--pickle",
+        help="Set it to save the SAG graph as a pickle file.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--tasks_end_time",
+        help="If you want to pass as input a csv with tasks instead of jobs,\
+            then set the latest simulation time until which the tool should analyze.",
+        default=0,
+        type=int,
+    )
     args = parser.parse_args()
 
     # Logger setup
@@ -100,7 +121,10 @@ if __name__ == "__main__":
             logger.info(f"Generated drawio file for TASKS at {drawio_path}!")
     else:
         logger.info("Processing CSV with JOBS...")
-        JDICT = get_job_dict(args.PATH_TO_CSV)
+        try:
+            JDICT = get_job_dict2(args.PATH_TO_CSV)
+        except:
+            JDICT = get_job_dict(args.PATH_TO_CSV)
 
     list_of_jobs = JDICT.keys()
     J = set(list_of_jobs)
@@ -108,12 +132,15 @@ if __name__ == "__main__":
     m = args.cores
 
     if args.pred != "":
-        get_pred(args.pred)
+        get_pred2(args.pred)
 
+    # Run the SAG algorithm
     algorithm = ALGORITHMS.get(args.algorithm)
     logger.info(f"Running {args.algorithm} SAG algorithm...")
     G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
+    # This assumes that every node has a field 'state'. TODO: This might not be the case, fix it or assert it!
     node_labels = {node: f"{data['state']}" for node, data in G.nodes(data=True)}
+    edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
     logger.info(f"DONE!")
 
     # Write drawio file from job csv
@@ -139,7 +166,6 @@ if __name__ == "__main__":
     logger.info(f"BCRT and WCRT saved at {csv_path}!")
 
     # Draw SAG and save to file
-    edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
     plt.figure(figsize=(30, 25))
     pos = nx.nx_agraph.graphviz_layout(G, prog="dot", args="-Gnodesep=1 -Granksep=2")
     nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size=500)

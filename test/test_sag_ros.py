@@ -4,7 +4,7 @@ import pytest
 import logging
 
 from src.sag_algorithms.ros import ScheduleGraphConstructionAlgorithmROS
-from utils import get_job_dict, get_pred
+from utils import *
 
 from networkx.algorithms.isomorphism import DiGraphMatcher
 
@@ -14,13 +14,20 @@ def get_inputs(jobs_path, cores, pred_path=""):
     assert os.path.isfile(pred_path) or pred_path == ""
     assert cores > 0
 
-    JDICT = get_job_dict(jobs_path)
+    try:
+        JDICT = get_job_dict2(jobs_path)
+    except:
+        JDICT = get_job_dict(jobs_path)
+
     list_of_jobs = JDICT.keys()
     J = set(list_of_jobs)
     PRED = {j: set() for j in list_of_jobs}
 
     if pred_path != "":
-        PRED = get_pred(pred_path)
+        try:
+            PRED = get_pred2(pred_path)
+        except:
+            PRED = get_pred(pred_path)
 
     return J, cores, JDICT, PRED
 

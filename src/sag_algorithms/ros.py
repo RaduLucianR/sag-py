@@ -1,5 +1,8 @@
 import networkx as nx
 import random
+import logging
+import tqdm
+from sag_template import sag_algorithm
 
 
 class StateROS:
@@ -34,7 +37,7 @@ class StateROS:
         self.NOJ = NOJ
 
     def __repr__(self):
-        return f"{self.A}"
+        return f"{self.A}{self.PP}{self.PP2}"
 
 
 def get_rand_node_id():
@@ -60,7 +63,15 @@ def shortestPathFromSourceToLeaf(G):
     return min(shortest_paths, key=len)
 
 
-def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
+@sag_algorithm
+def ScheduleGraphConstructionAlgorithmROS(
+    J: set,
+    m: int,
+    JDICT: dict,
+    PRED: dict,
+    logger=logging.Logger("SAGPY", logging.CRITICAL),
+) -> tuple[nx.DiGraph, dict, dict]:
+    bar = tqdm.tqdm(desc="[SAGPY-ROS] Progress")  # Progress bar
     INF = 100000  # Representation of infinity
     G = nx.DiGraph()
     BR = {Ji: INF for Ji in J}
@@ -95,9 +106,11 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
             PP = (pp_min, pp_max)
 
         if old_PP != PP:
-            print(f"The PP changed from {old_PP} to {PP}; we are in state with A = {A}")
+            logger.debug(
+                f"The PP changed from {old_PP} to {PP}; we are in state with A = {A}"
+            )
         else:
-            print(f"The PP is the same, i.e. {PP}; we are in state with A = {A}")
+            logger.debug(f"The PP is the same, i.e. {PP}; we are in state with A = {A}")
 
         E_P = set()  # Set that contains the eligible jobs for dispatch from this state.
         # Certainly eligible jobs                r_max <= PP_max
@@ -160,10 +173,12 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 )
         ####################################
 
-        print(
+        logger.debug(
             f"Current state with A: {A}, PP:[{PP[0]}, {PP[1]}] and PP2: [{PP2[0]}, {PP2[1]}]; after dispatching {last_dispatched_job}."
         )
-        print(f"We have E_P={E_P}, P_E_P={P_E_P}, C_E_P={C_E_P}, P_LP_E={P_LP_E}")
+        logger.debug(
+            f"We have E_P={E_P}, P_E_P={P_E_P}, C_E_P={C_E_P}, P_LP_E={P_LP_E}"
+        )
 
         for Ji in E_P:
             r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
@@ -210,7 +225,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 CA.append(LFTi)
                 PA.sort()
                 CA.sort()
-                print(
+                logger.debug(
                     f"Dispatched {Ji} with ESTi = {ESTi} and LSTi = {LSTi}; EFTi = {EFTi} and LFTi = {LFTi}"
                 )
 
@@ -276,7 +291,7 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                     if len(aux_P_LP_E) > 0:
                         new_PP2 = PP
 
-                print(
+                logger.debug(
                     f"After dispatching {Ji} after state with PP: {PP}; the C_E_P is {C_E_P}, the P_E_P is {P_E_P} and the E_P is {E_P} | The new PP is {new_PP} because |aux_E_P| = {len(aux_E_P)}"
                 )
 
@@ -288,13 +303,16 @@ def ScheduleGraphConstructionAlgorithmROS(J, m, JDICT, PRED):
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
                 WR[Ji] = max(LFTi - r_max, WR[Ji])
             else:
-                print(
+                logger.debug(
                     f"Cannot dispatch {Ji} after state with A: {A}, PP:[{PP[0]}, {PP[1]}] and PP2: [{PP2[0]}, {PP2[1]}], because ESTi={ESTi} > LSTi={LSTi}"
                 )
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
+        bar.update(1)
 
-    print("BR:", BR)
-    print("WR:", WR)
+    logger.debug(f"BR: {BR}")
+    logger.debug(f"WR: {WR}")
+    bar.close()
+
     return G, BR, WR

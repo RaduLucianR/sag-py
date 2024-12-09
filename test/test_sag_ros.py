@@ -1,8 +1,9 @@
 import os
 import pickle
 import pytest
+import logging
 
-from sag_rosJazzy import ScheduleGraphConstructionAlgorithmROS
+from src.sag_algorithms.ros import ScheduleGraphConstructionAlgorithmROS
 from utils import get_job_dict, get_pred
 
 from networkx.algorithms.isomorphism import DiGraphMatcher
@@ -47,7 +48,9 @@ def SAG_match(jobs, expected_graph, cores):
     assert os.path.isfile(expected_graph) == True
 
     inputs = get_inputs(jobs, cores)
-    G1 = ScheduleGraphConstructionAlgorithmROS(*inputs)[0]
+    G1 = ScheduleGraphConstructionAlgorithmROS(
+        *inputs, logger=logging.Logger("SAGPY", logging.CRITICAL)
+    )[0]
     G2 = get_output(expected_graph)
     matcher = DiGraphMatcher(G1, G2, node_match=node_match, edge_match=edge_match)
 

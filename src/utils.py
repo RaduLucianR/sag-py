@@ -1,4 +1,5 @@
 import csv
+import os
 
 
 def get_job_dict(path):
@@ -46,3 +47,38 @@ def get_pred(path):
         PRED[key] = values
 
     return PRED
+
+
+def is_job_set_csv(path: str):
+    """
+    Checks whether a given csv file via a path follows the job set csv specification.
+    """
+
+    if os.path.isfile(path) == False:
+        raise ValueError("The given path doesn't exist!")
+
+    file = open(path)
+    reader = csv.reader(file, delimiter=",")
+    job_ids = list()
+
+    for index, row in enumerate(reader):
+        if len(row) != 8:
+            raise ValueError(
+                f"Row {index} has {len(row)} columns instead of 8! In csv file at {path}"
+            )
+
+        for val in row:
+            try:
+                int(val)
+            except ValueError:
+                raise ValueError(
+                    f"Row {index}'s values cannot be converted to int! In csv file at {path}"
+                )
+
+        job_ids.append(int(row[1]))
+
+    if len(job_ids) != len(set(job_ids)):
+        raise ValueError(f"There are jobs with the same ID in the csv file at {path}")
+
+
+is_job_set_csv("/home/radu/repos/rtas2019/src/hey.csv")

@@ -2,6 +2,8 @@
 
 Schedule-abstraction graph (SAG) is a reachability-based response-time analysis for real-time systems.
 
+It can be used to determine analytically whether time-critical tasks meet their deadlines according to a WC-JLFP-NP scheduler.
+
 This is the unofficial implementation of the SAG in Python. You can visit the official repository [here](https://github.com/SAG-org/schedule_abstraction-main). This is still WIP (Work-in-Progress) - you can run the anaysis but it doesn't scale because path merging is not implemented yet. The implemented SAG follows the following paper:
 - M. Nasri, G. Nelissen, and B. Brandenburg, “[Response-Time Analysis of Limited-Preemptive Parallel DAG Tasks under Global Scheduling](https://drops.dagstuhl.de/storage/00lipics/lipics-vol133-ecrts2019/LIPIcs.ECRTS.2019.21/LIPIcs.ECRTS.2019.21.pdf)”, Proceedings of the 31st Euromicro Conference on Real-Time Systems (ECRTS 2019), pp. 21:1–21:23, July 2019.
 

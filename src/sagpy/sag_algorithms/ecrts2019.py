@@ -77,7 +77,11 @@ def ScheduleGraphConstructionAlgorithm(
         A1_max = A1[1]
 
         for Ji in R_P:
-            r_min, r_max, C_min, C_max, p_i = JDICT[Ji]
+            r_min = JDICT[Ji]["r_min"]
+            r_max = JDICT[Ji]["r_max"]
+            C_min = JDICT[Ji]["C_min"]
+            C_max = JDICT[Ji]["C_max"]
+            p_i = JDICT[Ji]["p"]
 
             def EFT_star(Jx):
                 if Jx in X:
@@ -92,7 +96,7 @@ def ScheduleGraphConstructionAlgorithm(
                     return WR[Jx]
 
             def th(Jx):
-                rx_max = JDICT[Jx][1]
+                rx_max = JDICT[Jx]["r_max"]
                 return max(
                     rx_max,
                     max(
@@ -102,16 +106,16 @@ def ScheduleGraphConstructionAlgorithm(
                 )
 
             def R_min(Ja):
-                ra_min = JDICT[Ja][0]
+                ra_min = JDICT[Ja]["r_min"]
                 return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
 
             def R_max(Ja):
-                ra_max = JDICT[Ja][1]
+                ra_max = JDICT[Ja]["r_max"]
                 return max(ra_max, max([LFT_star(Jy) for Jy in PRED[Ja]], default=0))
 
             ESTi = max(R_min(Ji), A1_min)
             t_wc = max(A1_max, min([R_max(Jb) for Jb in R_P], default=INF))
-            t_high = min([th(Jz) for Jz in R_P if JDICT[Jz][4] < p_i], default=INF)
+            t_high = min([th(Jz) for Jz in R_P if JDICT[Jz]["p"] < p_i], default=INF)
             LSTi = min(t_wc, t_high - 1)
 
             if ESTi <= LSTi:

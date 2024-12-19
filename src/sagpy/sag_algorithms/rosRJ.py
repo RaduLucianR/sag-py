@@ -48,7 +48,7 @@ class StateROS:
         self.PP = PP
 
     def __repr__(self):
-        return f"{self.A}"
+        return f"{self.A}{self.PP}"
 
 
 @sag_algorithm

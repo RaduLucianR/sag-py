@@ -174,8 +174,11 @@ def main():
     logger.info(f"BCRT and WCRT saved at {csv_path}!")
 
     # Draw SAG and save to file
-    plt.figure(figsize=(30, 25))
-    pos = nx.nx_agraph.graphviz_layout(G, prog="dot", args="-Gnodesep=1 -Granksep=2")
+    num_nodes = len(G.nodes)
+    x = num_nodes * 1.1
+    y = num_nodes * 0.7
+    plt.figure(figsize=(x, y))
+    pos = nx.nx_agraph.graphviz_layout(G, prog="dot", args="-Gnodesep=1 -Granksep=1")
     nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size=500)
     nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=20)
     nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=20)

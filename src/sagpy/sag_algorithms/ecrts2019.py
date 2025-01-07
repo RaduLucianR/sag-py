@@ -163,7 +163,8 @@ def ScheduleGraphConstructionAlgorithm(
                 G.add_edge(P[-1], new_state_id, job=Ji)
 
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
-                WR[Ji] = max(LFTi - r_max, WR[Ji])
+                WR[Ji] = max(LFTi - r_min, WR[Ji])
+                logger.info(f"job {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)

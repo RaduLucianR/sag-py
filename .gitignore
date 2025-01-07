@@ -3,3 +3,4 @@ notes.md
 output.txt
 .pytest_cache
 dist
+.vscode

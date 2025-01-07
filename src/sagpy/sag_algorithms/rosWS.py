@@ -3,6 +3,7 @@ import random
 import logging
 from typing import Literal
 from sagpy.sag_template import sag_algorithm
+from itertools import chain, combinations
 
 
 ######## Utility functions #######
@@ -27,6 +28,25 @@ def shortestPathFromSourceToLeaf(G):
         shortest_paths.append(sp)
 
     return min(shortest_paths, key=len)
+
+
+def subsets_with_constraint(X, C):
+    # Ensure C is a subset of X
+    if not C.issubset(X):
+        raise ValueError("C must be a subset of X")
+
+    # Compute X' = X \ C
+    X_prime = X - C
+
+    # Generate all subsets of X'
+    def all_subsets(iterable):
+        "Returns all subsets of the iterable"
+        s = list(iterable)
+        return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
+
+    # Add C to each subset of X'
+    result = [set(subset).union(C) for subset in all_subsets(X_prime)]
+    return result
 
 
 class StateROS:
@@ -162,31 +182,28 @@ def ScheduleGraphConstructionAlgorithm(
 
             dispatch = False
             which_WS = set()
+            # BWS = set([Ji]).union(mWS)
 
-            if len(mWS) > 0:
-                if Ji in mWS:
-                    if is_eligible(mWS) is True:
+            if Ji in MWS:
+                # if is_eligible(BWS) is True:
+                #     dispatch = True
+                #     which_WS = BWS
+                min_LST = INF
+                all_WS = subsets_with_constraint(MWS, set([Ji]).union(mWS))
+
+                for WS in all_WS:
+                    if is_eligible(WS) is True:
                         dispatch = True
-                        which_WS = mWS
-                elif Ji in MWS:
-                    if is_eligible(MWS) is True:
-                        dispatch = True
-                        which_WS = MWS
-                    elif is_eligible(set([Ji]).union(mWS)):
-                        dispatch = True
-                        which_WS = set([Ji]).union(mWS)
-            else:
-                if Ji in MWS:
-                    if is_eligible(MWS) is True:
-                        dispatch = True
-                        which_WS = MWS
-                    elif is_eligible(set([Ji]).union(mWS)):
-                        dispatch = True
-                        which_WS = set([Ji]).union(mWS)
-                else:
-                    if is_eligible(R_P) is True:
-                        dispatch = True
-                        which_WS = R_P
+                        lst = get_ST(WS)[1]
+
+                        if lst < min_LST:
+                            min_LST = lst
+                            which_WS = WS
+
+            elif Ji in R_P and len(mWS) == 0:
+                if is_eligible(R_P) is True:
+                    dispatch = True
+                    which_WS = R_P
 
             if dispatch is True:
                 ESTi, LSTi, t_high = get_ST(which_WS)
@@ -229,37 +246,15 @@ def ScheduleGraphConstructionAlgorithm(
                 two_states = False
 
                 if parent_state != None:
-                    # Ji is higher priority than last dispatched job
-                    if p_i < JDICT[last_dispatched_job]["p"]:
+                    if Ji in MWS:
+                        new_PP = PP
+                    if (Ji in MWS) and (len(mWS) == 0) and is_eligible(R_P):
+                        EST, LST, t_h = get_ST(R_P)
+                        new_PP2 = (EST, LST)
+                        two_states = True
+                    if Ji not in MWS:  # if Ji in R_P but Ji *not* in MWS:
                         new_PP[0] = ESTi
                         new_PP[1] = LSTi
-                        # LRT = min([R_max(Jy) for Jy in R_P])
-                        # if LRT <= R_max(Ji):
-                        #     if LRT > A1_max:
-                        #         new_PP[1] = min(LRT, t_high - 1)
-                        #     else:  # if LRT <= A1_max
-                        #         new_PP[1] = LRT
-                        # else:  # if LRT > R_max
-                        #     new_PP[1] = max(A1_max, R_max(Ji))
-                    else:  # if p_i > p_L i.e. Ji is lower priority than last dispatched job
-                        if Ji in mWS:
-                            new_PP = PP  # doesn't change
-                        elif Ji in MWS:
-                            if len(mWS) > 0:
-                                new_PP = PP  # doesn't change
-                            else:  # mWS is empty
-                                diff = R_P.difference(MWS.difference(set([Ji])))
-
-                                max_p = max(JDICT[Jy]["p"] for Jy in diff)
-                                if p_i == max_p:
-                                    new_PP = PP
-                                    new_PP2 = (ESTi, LSTi)
-                                    two_states = True
-                                else:
-                                    new_PP = PP
-                        else:  # if Ji in R_P but Ji *not* in MWS:
-                            new_PP[0] = ESTi
-                            new_PP[1] = LSTi
                 else:
                     new_PP = PP
 
@@ -282,12 +277,13 @@ def ScheduleGraphConstructionAlgorithm(
                     G.add_edge(P[-1], new_state_id, job=Ji)
 
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
-                WR[Ji] = max(LFTi - r_max, WR[Ji])
+                WR[Ji] = max(LFTi - r_min, WR[Ji])
+                logger.info(f"job {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
 
-    logger.debug(f"BR: {BR}")
-    logger.debug(f"WR: {WR}")
+    logger.info(f"BR: {BR}")
+    logger.info(f"WR: {WR}")
 
     return G, BR, WR

@@ -175,7 +175,7 @@ def main():
 
     # Draw SAG and save to file
     num_nodes = len(G.nodes)
-    x = num_nodes * 1.1
+    x = num_nodes * 1.3
     y = num_nodes * 0.7
     plt.figure(figsize=(x, y))
     pos = nx.nx_agraph.graphviz_layout(G, prog="dot", args="-Gnodesep=1 -Granksep=1")

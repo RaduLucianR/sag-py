@@ -191,16 +191,16 @@ def is_pred_set_csv(path: str) -> bool:
     first_row = next(reader)
     first_row = [s.strip().lower() for s in first_row]
 
-    if first_row != [
-        "predecessor tid",
-        "predecessor jid",
-        "successor tid",
-        "successor jid",
-    ]:
-        raise ValueError(
-            "First column is incorrect! It should be (case insensitive):\
-                [predecessor tid, predecessor jid, successor tid, successor jid]"
-        )
+    # if first_row != [
+    #     "predecessor tid",
+    #     "predecessor jid",
+    #     "successor tid",
+    #     "successor jid",
+    # ]:
+    #     raise ValueError(
+    #         "First column is incorrect! It should be (case insensitive):\
+    #             [predecessor tid, predecessor jid, successor tid, successor jid]"
+    #     )
 
     for index, row in enumerate(reader):
         if len(row) != 4:

@@ -80,38 +80,17 @@ def ScheduleGraphConstructionAlgorithm(
     logger=logging.Logger("SAGPY", logging.CRITICAL),
 ) -> tuple[nx.DiGraph, dict, dict]:
     ############## Init ################
-    INF = 100000  # Representation for infinity
+    INF = 10000000000000000000000000  # Representation for infinity
     G = nx.DiGraph()
     BR = {Ji: INF for Ji in J}
     WR = {Ji: 0 for Ji in J}
+    LFT_J = {Ji: 0 for Ji in J}
+    SCHED = True
     ####################################
 
-    #######################
-    def EFT_star(Jx):
-        if Jx in X:
-            return FTI[Jx][0]  # EFT_x(v_p)
-        else:
-            return BR[Jx]
-
-    def LFT_star(Jx):
-        if Jx in X:
-            return FTI[Jx][1]  # LFT_x(v_p)
-        else:
-            return WR[Jx]
-
-    def R_min(Ja):
-        ra_min = JDICT[Ja]["r_min"]
-        return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
-
-    def R_max(Ja):
-        ra_max = JDICT[Ja]["r_max"]
-        return max(ra_max, max([LFT_star(Jy) for Jy in PRED[Ja]], default=0))
-
-    ########################
-
     ############# Init ##############
-    ERT0 = min([R_min(Jy) for Jy in J])
-    LRT0 = min([R_max(Jy) for Jy in J])
+    ERT0 = min([JDICT[Jy]["r_min"] for Jy in J])
+    LRT0 = min([JDICT[Jy]["r_max"] for Jy in J])
     PP0 = (ERT0, LRT0)
     InitNode = StateROS([(0, 0) for core in range(m)], set(), dict(), PP0)
     G.add_node(0, state=InitNode)
@@ -132,6 +111,29 @@ def ScheduleGraphConstructionAlgorithm(
         A1_min = A1[0]
         A1_max = A1[1]
 
+        #######################
+        def EFT_star(Jx):
+            if Jx in X:
+                return FTI[Jx][0]  # EFT_x(v_p)
+            else:
+                return BR[Jx]
+
+        def LFT_star(Jx):
+            if Jx in X:
+                return FTI[Jx][1]  # LFT_x(v_p)
+            else:
+                return WR[Jx]
+
+        def R_min(Ja):
+            ra_min = JDICT[Ja]["r_min"]
+            return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
+
+        def R_max(Ja):
+            ra_max = JDICT[Ja]["r_max"]
+            return max(ra_max, max([LFT_star(Jy) for Jy in PRED[Ja]], default=0))
+
+        ########################
+
         #### ROS ####
         # All jobs that have lower priority than the last dispatched job
         LP = (
@@ -149,6 +151,7 @@ def ScheduleGraphConstructionAlgorithm(
             r_max = JDICT[Ji]["r_max"]
             C_min = JDICT[Ji]["C_min"]
             C_max = JDICT[Ji]["C_max"]
+            d_i = JDICT[Ji]["d"]
             p_i = JDICT[Ji]["p"]
 
             ########### AUX FUNCTIONS ##############
@@ -182,23 +185,23 @@ def ScheduleGraphConstructionAlgorithm(
 
             dispatch = False
             which_WS = set()
-            # BWS = set([Ji]).union(mWS)
+            BWS = set([Ji]).union(mWS)
 
             if Ji in MWS:
-                # if is_eligible(BWS) is True:
-                #     dispatch = True
-                #     which_WS = BWS
-                min_LST = INF
-                all_WS = subsets_with_constraint(MWS, set([Ji]).union(mWS))
+                if is_eligible(BWS) is True:
+                    dispatch = True
+                    which_WS = BWS
+                # max_LST = 0
+                # all_WS = subsets_with_constraint(MWS, set([Ji]).union(mWS))
 
-                for WS in all_WS:
-                    if is_eligible(WS) is True:
-                        dispatch = True
-                        lst = get_ST(WS)[1]
+                # for WS in all_WS:
+                #     if is_eligible(WS) is True:
+                #         dispatch = True
+                #         lst = get_ST(WS)[1]
 
-                        if lst < min_LST:
-                            min_LST = lst
-                            which_WS = WS
+                #         if lst > max_LST:
+                #             max_LST = lst
+                #             which_WS = WS
 
             elif Ji in R_P and len(mWS) == 0:
                 if is_eligible(R_P) is True:
@@ -209,17 +212,24 @@ def ScheduleGraphConstructionAlgorithm(
                 ESTi, LSTi, t_high = get_ST(which_WS)
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
+
+                if LFTi > d_i:  # Check if this job doesn't have a deadline miss
+                    # If it misses the deadline, then the job set is NOT schedulable
+                    # So no need to check the rest of the paths, just return
+                    logger.info("Not schedulable!")
+                    return G, BR, WR, False
+
                 PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
                 CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
 
                 PA.append(EFTi)
                 CA.append(LFTi)
 
-                for Jc in X.intersection(PRED[Ji]):
-                    LFTc = FTI[Jc][1]
-                    if LSTi < LFTc and LFTc in CA:
-                        # TODO: Check if CA.index(LFTc) is correct here
-                        CA[CA.index(LFTc)] = LSTi
+                # for Jc in X.intersection(PRED[Ji]):
+                #     LFTc = FTI[Jc][1]
+                #     if LSTi < LFTc and LFTc in CA:
+                #         # TODO: Check if CA.index(LFTc) is correct here
+                #         CA[CA.index(LFTc)] = LSTi
 
                 PA.sort()
                 CA.sort()
@@ -278,12 +288,14 @@ def ScheduleGraphConstructionAlgorithm(
 
                 BR[Ji] = min(EFTi - r_min, BR[Ji])
                 WR[Ji] = max(LFTi - r_min, WR[Ji])
-                logger.info(f"job {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
+                # logger.info(f"job {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
 
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
+        # breakpoint()
+        logger.info(f"The graph has {len(G.nodes)} nodes")
 
-    logger.info(f"BR: {BR}")
-    logger.info(f"WR: {WR}")
+    # logger.info(f"BR: {BR}")
+    # logger.info(f"WR: {WR}")
 
-    return G, BR, WR
+    return G, BR, WR, True

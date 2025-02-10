@@ -69,6 +69,17 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--png",
+        help="Set it to save the SAG graph as a PNG file.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--more_tasksets",
+        help="PATH_TO_CSV is treated as a path to a folder with CSV files. \
+            The algorithm processes all CSV files in the given folder one-by-one.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--tasks_end_time",
         help="If you want to pass as input a csv with tasks instead of jobs,\
             then set the latest simulation time until which the tool should analyze.",
@@ -108,6 +119,11 @@ def main():
     JDICT = dict()  # Dictionary of jobs which contains all info about each job
     PRED = dict()  # Dictionary that has the precedence constraints for each job
     m = int()  # Number of cores
+    SCHED = False  # Whether the job set is schedulable or not
+
+    # Initialize the SAG algorithm
+    algorithm = ALGORITHMS.get(args.algorithm)
+    logger.info(f"Running {args.algorithm} SAG algorithm...")
 
     if args.tasks_end_time > 0:
         logger.info("Processing CSV with TASKS...")
@@ -122,33 +138,98 @@ def main():
             logger.info(f"Generated drawio file for TASKS at {drawio_path}!")
     else:
         logger.info("Processing CSV with JOBS...")
-        try:
-            JDICT = get_job_dict2(args.PATH_TO_CSV)
-        except:
-            JDICT = get_job_dict(args.PATH_TO_CSV)
+        if args.more_tasksets == False:
+            try:
+                JDICT = get_job_dict2(args.PATH_TO_CSV)
+            except:
+                JDICT = get_job_dict(args.PATH_TO_CSV)
 
-    list_of_jobs = JDICT.keys()
-    J = set(list_of_jobs)
-    PRED = {j: set() for j in list_of_jobs}
-    m = args.cores
+            list_of_jobs = JDICT.keys()
+            J = set(list_of_jobs)
+            PRED = {j: set() for j in list_of_jobs}
+            m = args.cores
 
-    if args.pred != "":
-        try:
-            aux_PRED = get_pred2(args.pred)
-        except:
-            aux_PRED = get_pred(args.pred)
+            if args.pred != "":
+                try:
+                    aux_PRED = get_pred2(args.pred)
+                    print("pred2")
+                except:
+                    aux_PRED = get_pred(args.pred)
+                    print("pred1")
 
-        for k in aux_PRED.keys():
-            PRED[k] = aux_PRED[k]
+                for k in aux_PRED.keys():
+                    PRED[k] = aux_PRED[k]
 
-    # Run the SAG algorithm
-    algorithm = ALGORITHMS.get(args.algorithm)
-    logger.info(f"Running {args.algorithm} SAG algorithm...")
-    G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
-    # This assumes that every node has a field 'state'. TODO: This might not be the case, fix it or assert it!
-    node_labels = {node: f"{data['state']}" for node, data in G.nodes(data=True)}
-    edge_labels = {(u, v): f"{data['job']}" for u, v, data in G.edges(data=True)}
-    logger.info(f"DONE!")
+            start_time = time.time()
+            try:  # TODO: This is supper ugly, please fix. All algorithms should output True/False for schedulable or not
+                G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
+            except:
+                G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
+            end_time = time.time()
+            logger.info(
+                f"Analysis took {(end_time - start_time) / 60} minutes for {len(J)} jobs"
+            )
+
+            # Write BR and WR to csv
+            csv_path = os.path.join(output_folder, "response_times.csv")
+            csv_file = open(csv_path, "w+")
+            writer = csv.writer(csv_file)
+            for j in list_of_jobs:
+                row = [j, BR[j], WR[j]]
+                writer.writerow(row)
+            writer.writerow([f"Schedulable: {SCHED}"])
+            csv_file.close()
+            logger.info(f"BCRT and WCRT saved at {csv_path}!")
+
+            # This assumes that every node has a field 'state'. TODO: This might not be the case, fix it or assert it!
+            node_labels = {
+                node: f"{data['state']}" for node, data in G.nodes(data=True)
+            }
+            edge_labels = {
+                (u, v): f"{data['job']}" for u, v, data in G.edges(data=True)
+            }
+            logger.info(f"DONE!")
+        if args.more_tasksets == True:
+            nrof_tasksets = 0
+            nrof_schedulable_tasksets = 0
+
+            for thing in os.walk(args.PATH_TO_CSV):
+                nrof_tasksets = len(thing[2])
+
+                for file_name in thing[2]:
+                    # TODO: Check if taskset is a .csv file
+                    taskset = os.path.join(thing[0], file_name)
+                    logger.info(f"Processing file {taskset}")
+
+                    try:
+                        JDICT = get_job_dict2(taskset)
+                    except:
+                        JDICT = get_job_dict(taskset)
+
+                    list_of_jobs = JDICT.keys()
+                    J = set(list_of_jobs)
+                    PRED = {j: set() for j in list_of_jobs}
+                    m = args.cores
+                    G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
+
+                    # Write BR and WR to csv
+                    csv_path = os.path.join(output_folder, f"rt_{file_name}")
+                    csv_file = open(csv_path, "w+")
+                    writer = csv.writer(csv_file)
+
+                    if SCHED == True:
+                        nrof_schedulable_tasksets += 1
+
+                        for j in list_of_jobs:
+                            row = [j, BR[j], WR[j]]
+                            writer.writerow(row)
+
+                    writer.writerow([f"Schedulable: {SCHED}"])
+                    csv_file.close()
+                    logger.info(f"Report saved at {csv_path}!")
+
+            sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
+            logger.info(f"The schedulability ratio is {sched_ratio}%")
 
     # Write drawio file from job csv
     if args.drawio == True:
@@ -163,29 +244,22 @@ def main():
             pickle.dump(G, f)
         logger.info(f"Saved SAG as pickle at {pickle_path}")
 
-    # Write BR and WR to csv
-    csv_path = os.path.join(output_folder, "response_times.csv")
-    csv_file = open(csv_path, "w+")
-    writer = csv.writer(csv_file)
-    for j in list_of_jobs:
-        row = [j, BR[j], WR[j]]
-        writer.writerow(row)
-    csv_file.close()
-    logger.info(f"BCRT and WCRT saved at {csv_path}!")
-
     # Draw SAG and save to file
-    num_nodes = len(G.nodes)
-    x = num_nodes * 1.3
-    y = num_nodes * 0.7
-    plt.figure(figsize=(x, y))
-    pos = nx.nx_agraph.graphviz_layout(G, prog="dot", args="-Gnodesep=1 -Granksep=1")
-    nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size=500)
-    nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=20)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=20)
-    fig_path = os.path.join(output_folder, "sag.png")
-    logger.info(f"Saving SAG as PNG...")
-    plt.savefig(fig_path, dpi=300, bbox_inches="tight")
-    logger.info(f"SAG figure saved at {fig_path}!")
+    if args.png == True:
+        num_nodes = len(G.nodes)
+        x = num_nodes * 1.3
+        y = num_nodes * 0.7
+        plt.figure(figsize=(x, y))
+        pos = nx.nx_agraph.graphviz_layout(
+            G, prog="dot", args="-Gnodesep=1 -Granksep=1"
+        )
+        nx.draw(G, pos, with_labels=False, node_color="lightblue", node_size=500)
+        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=20)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=20)
+        fig_path = os.path.join(output_folder, "sag.png")
+        logger.info(f"Saving SAG as PNG...")
+        plt.savefig(fig_path, dpi=300, bbox_inches="tight")
+        logger.info(f"SAG figure saved at {fig_path}!")
 
 
 if __name__ == "__main__":

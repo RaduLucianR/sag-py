@@ -5,6 +5,8 @@ from typing import Literal
 from sagpy.sag_template import sag_algorithm
 from itertools import chain, combinations
 
+SET_IDs = set()
+
 
 ######## Utility functions #######
 def get_rand_node_id():
@@ -16,7 +18,14 @@ def get_rand_node_id():
     n = 6
     lower_bound = 10 ** (n - 1)
     upper_bound = 10**n - 1
-    return random.randint(lower_bound, upper_bound)
+    id = random.randint(lower_bound, upper_bound)
+
+    while id in SET_IDs:
+        id = random.randint(lower_bound, upper_bound)
+
+    SET_IDs.add(id)
+
+    return id
 
 
 def shortestPathFromSourceToLeaf(G):
@@ -86,6 +95,7 @@ def ScheduleGraphConstructionAlgorithm(
     WR = {Ji: 0 for Ji in J}
     LFT_J = {Ji: 0 for Ji in J}
     SCHED = True
+    logger.info(f"Starting analysis for {len(J)} jobs")
     ####################################
 
     ############# Init ##############
@@ -293,7 +303,8 @@ def ScheduleGraphConstructionAlgorithm(
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
         # breakpoint()
-        logger.info(f"The graph has {len(G.nodes)} nodes")
+        if len(G.nodes) % 10 == 0:
+            logger.info(f"The graph has {len(G.nodes)} nodes")
 
     # logger.info(f"BR: {BR}")
     # logger.info(f"WR: {WR}")

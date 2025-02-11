@@ -6,6 +6,7 @@ import time
 import os
 import pickle
 import logging
+from tqdm import tqdm
 
 from sagpy.generate_jobs import generate_jobs
 from sagpy.drawio_diagram import generate_diagram
@@ -165,9 +166,10 @@ def main():
                 G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
             except:
                 G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
-            end_time = time.time()
+            minutes = int((end_time - start_time) // 60)
+            seconds = (end_time - start_time) % 60
             logger.info(
-                f"Analysis took {(end_time - start_time) / 60} minutes for {len(J)} jobs"
+                f"Analysis took {minutes} minutes {seconds:.1f} seconds for {len(J)} jobs"
             )
 
             # Write BR and WR to csv
@@ -194,9 +196,10 @@ def main():
             nrof_schedulable_tasksets = 0
 
             for thing in os.walk(args.PATH_TO_CSV):
+                current_taskset = 0
                 nrof_tasksets = len(thing[2])
-
-                for file_name in thing[2]:
+                start_taskset = time.time()
+                for file_name in tqdm(thing[2]):
                     # TODO: Check if taskset is a .csv file
                     if "task_set" in file_name:
                         split_file_name = file_name.split("_")
@@ -225,12 +228,19 @@ def main():
                     except:
                         PRED = {j: set() for j in list_of_jobs}
 
-                    start_time = time.time()
-                    G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
-                    end_time = time.time()
-                    logger.info(
-                        f"Analysis took {(end_time - start_time) / 60} minutes for {len(J)} jobs"
-                    )
+                    try:
+                        start_time = time.time()
+                        G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
+                        end_time = time.time()
+                        minutes = int((end_time - start_time) // 60)
+                        seconds = (end_time - start_time) % 60
+                        logger.info(
+                            f"Analysis took {minutes} minutes {seconds:.1f} seconds for {len(J)} jobs"
+                        )
+                    except Exception as e:
+                        logger.info(f"There was an error: {e}")
+                        sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
+                        logger.info(f"Current schedulability ratio is {sched_ratio}%")
 
                     # # Write BR and WR to csv
                     # csv_path = os.path.join(output_folder, f"rt_{file_name}")
@@ -240,6 +250,11 @@ def main():
                     if SCHED == True:
                         nrof_schedulable_tasksets += 1
 
+                    sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
+                    logger.info(f"Current schedulability ratio is {sched_ratio}%")
+                    # logger.info(f"Current task set is: {current_taskset}")
+                    current_taskset += 1
+
                     #     for j in list_of_jobs:
                     #         row = [j, BR[j], WR[j]]
                     #         writer.writerow(row)
@@ -247,6 +262,12 @@ def main():
                     # writer.writerow([f"Schedulable: {SCHED}"])
                     # csv_file.close()
                     # logger.info(f"Report saved at {csv_path}!")
+                end_taskset = time.time()
+                minutes = int((end_taskset - start_taskset) // 60)
+                seconds = (end_time - start_time) % 60
+                logger.info(
+                    f"Analysis took {minutes} minutes {seconds:.1f} seconds for {nrof_tasksets} task sets"
+                )
 
             sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
             logger.info(f"The schedulability ratio is {sched_ratio}%")

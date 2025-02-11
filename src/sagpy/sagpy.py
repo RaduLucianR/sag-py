@@ -198,8 +198,15 @@ def main():
 
                 for file_name in thing[2]:
                     # TODO: Check if taskset is a .csv file
-                    taskset = os.path.join(thing[0], file_name)
-                    logger.info(f"Processing file {taskset}")
+                    if "task_set" in file_name:
+                        split_file_name = file_name.split("_")
+                        task_set_nr = split_file_name[2]
+                        pred_file = f"pred_{task_set_nr}"
+                        taskset = os.path.join(thing[0], file_name)
+                        preds = os.path.join(thing[0], pred_file)
+                        logger.info(f"Processing file {taskset}")
+                    else:
+                        continue
 
                     try:
                         JDICT = get_job_dict2(taskset)
@@ -210,23 +217,36 @@ def main():
                     J = set(list_of_jobs)
                     PRED = {j: set() for j in list_of_jobs}
                     m = args.cores
-                    G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
 
-                    # Write BR and WR to csv
-                    csv_path = os.path.join(output_folder, f"rt_{file_name}")
-                    csv_file = open(csv_path, "w+")
-                    writer = csv.writer(csv_file)
+                    try:
+                        aux_PRED = get_pred2(preds)
+                        for k in aux_PRED.keys():
+                            PRED[k] = aux_PRED[k]
+                    except:
+                        PRED = {j: set() for j in list_of_jobs}
+
+                    start_time = time.time()
+                    G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
+                    end_time = time.time()
+                    logger.info(
+                        f"Analysis took {(end_time - start_time) / 60} minutes for {len(J)} jobs"
+                    )
+
+                    # # Write BR and WR to csv
+                    # csv_path = os.path.join(output_folder, f"rt_{file_name}")
+                    # csv_file = open(csv_path, "w+")
+                    # writer = csv.writer(csv_file)
 
                     if SCHED == True:
                         nrof_schedulable_tasksets += 1
 
-                        for j in list_of_jobs:
-                            row = [j, BR[j], WR[j]]
-                            writer.writerow(row)
+                    #     for j in list_of_jobs:
+                    #         row = [j, BR[j], WR[j]]
+                    #         writer.writerow(row)
 
-                    writer.writerow([f"Schedulable: {SCHED}"])
-                    csv_file.close()
-                    logger.info(f"Report saved at {csv_path}!")
+                    # writer.writerow([f"Schedulable: {SCHED}"])
+                    # csv_file.close()
+                    # logger.info(f"Report saved at {csv_path}!")
 
             sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
             logger.info(f"The schedulability ratio is {sched_ratio}%")

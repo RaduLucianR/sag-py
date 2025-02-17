@@ -223,6 +223,9 @@ def ScheduleGraphConstructionAlgorithm(
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
 
+                # if LFTi == 6:
+                #     breakpoint()
+
                 if LFTi > d_i:  # Check if this job doesn't have a deadline miss
                     # If it misses the deadline, then the job set is NOT schedulable
                     # So no need to check the rest of the paths, just return
@@ -263,6 +266,7 @@ def ScheduleGraphConstructionAlgorithm(
 
                 new_PP = [0, 0]
                 new_PP2 = [0, 0]
+                new_A_2 = [(0, 0) for i in range(m)]
                 two_states = False
 
                 if parent_state != None:
@@ -270,7 +274,22 @@ def ScheduleGraphConstructionAlgorithm(
                         new_PP = PP
                     if (Ji in MWS) and (len(mWS) == 0) and is_eligible(R_P):
                         EST, LST, t_h = get_ST(R_P)
+                        EFT = EST + C_min
+                        LFT = LST + C_max
                         new_PP2 = (EST, LST)
+
+                        PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
+                        CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
+
+                        PA.append(EFT)
+                        CA.append(LFT)
+
+                        PA.sort()
+                        CA.sort()
+
+                        for i in range(m):
+                            new_A_2[i] = (PA[i], CA[i])
+
                         two_states = True
                     if Ji not in MWS:  # if Ji in R_P but Ji *not* in MWS:
                         new_PP[0] = ESTi
@@ -291,7 +310,7 @@ def ScheduleGraphConstructionAlgorithm(
                     G.add_node(new_state_id, state=new_state)
                     G.add_edge(P[-1], new_state_id, job=Ji)
 
-                    new_state = StateROS(new_A, new_X, new_FTI, new_PP2)
+                    new_state = StateROS(new_A_2, new_X, new_FTI, new_PP2)
                     new_state_id = get_rand_node_id()
                     G.add_node(new_state_id, state=new_state)
                     G.add_edge(P[-1], new_state_id, job=Ji)

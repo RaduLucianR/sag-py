@@ -166,6 +166,7 @@ def main():
                 G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
             except:
                 G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
+            end_time = time.time()
             minutes = int((end_time - start_time) // 60)
             seconds = (end_time - start_time) % 60
             logger.info(
@@ -192,85 +193,101 @@ def main():
             }
             logger.info(f"DONE!")
         if args.more_tasksets == True:
-            nrof_tasksets = 0
-            nrof_schedulable_tasksets = 0
+            U_list = [3.6, 3.2, 2.8, 2.4, 2.0, 1.6, 1.2, 0.8]
 
-            for thing in os.walk(args.PATH_TO_CSV):
-                current_taskset = 0
-                nrof_tasksets = len(thing[2])
-                start_taskset = time.time()
-                for file_name in tqdm(thing[2]):
-                    # TODO: Check if taskset is a .csv file
-                    if "task_set" in file_name:
-                        split_file_name = file_name.split("_")
-                        task_set_nr = split_file_name[2]
-                        pred_file = f"pred_{task_set_nr}"
-                        taskset = os.path.join(thing[0], file_name)
-                        preds = os.path.join(thing[0], pred_file)
-                        logger.info(f"Processing file {taskset}")
-                    else:
-                        continue
+            for U in U_list:
+                file = f"/home/radu/repos/sag-ros-experiments/SAG_input_SobhaniFig9/tasksets_{U}"
+                nrof_tasksets = 1
+                nrof_schedulable_tasksets = 0
 
-                    try:
-                        JDICT = get_job_dict2(taskset)
-                    except:
-                        JDICT = get_job_dict(taskset)
+                for thing in os.walk(file):
+                    current_taskset = 0
+                    nrof_tasksets = len(thing[2])
+                    start_taskset = time.time()
 
-                    list_of_jobs = JDICT.keys()
-                    J = set(list_of_jobs)
-                    PRED = {j: set() for j in list_of_jobs}
-                    m = args.cores
+                    for file_name in tqdm(thing[2]):
+                        # TODO: Check if taskset is a .csv file
+                        if "task_set" in file_name:
+                            split_file_name = file_name.split("_")
+                            task_set_nr = split_file_name[2]
+                            pred_file = f"pred_{task_set_nr}"
+                            taskset = os.path.join(thing[0], file_name)
+                            preds = os.path.join(thing[0], pred_file)
+                            logger.info(f"Processing file {taskset}")
+                        else:
+                            continue
 
-                    try:
-                        aux_PRED = get_pred2(preds)
-                        for k in aux_PRED.keys():
-                            PRED[k] = aux_PRED[k]
-                    except:
+                        try:
+                            JDICT = get_job_dict2(taskset)
+                        except:
+                            JDICT = get_job_dict(taskset)
+
+                        list_of_jobs = JDICT.keys()
+                        J = set(list_of_jobs)
                         PRED = {j: set() for j in list_of_jobs}
+                        m = args.cores
 
-                    try:
-                        start_time = time.time()
-                        G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
-                        end_time = time.time()
-                        minutes = int((end_time - start_time) // 60)
-                        seconds = (end_time - start_time) % 60
-                        logger.info(
-                            f"Analysis took {minutes} minutes {seconds:.1f} seconds for {len(J)} jobs"
-                        )
-                    except Exception as e:
-                        logger.info(f"There was an error: {e}")
+                        try:
+                            aux_PRED = get_pred2(preds)
+                            for k in aux_PRED.keys():
+                                PRED[k] = aux_PRED[k]
+                        except:
+                            PRED = {j: set() for j in list_of_jobs}
+
+                        try:
+                            start_time = time.time()
+                            G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
+                            end_time = time.time()
+                            minutes = int((end_time - start_time) // 60)
+                            seconds = (end_time - start_time) % 60
+                            logger.info(
+                                f"Analysis took {minutes} minutes {seconds:.1f} seconds for {len(J)} jobs"
+                            )
+                        except Exception as e:
+                            logger.info(f"There was an error: {e}")
+                            sched_ratio = (
+                                nrof_schedulable_tasksets / nrof_tasksets * 100
+                            )
+                            logger.info(
+                                f"Current schedulability ratio is {sched_ratio}%"
+                            )
+
+                        # # Write BR and WR to csv
+                        # csv_path = os.path.join(output_folder, f"rt_{file_name}")
+                        # csv_file = open(csv_path, "w+")
+                        # writer = csv.writer(csv_file)
+
+                        if SCHED == True:
+                            nrof_schedulable_tasksets += 1
+
                         sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
                         logger.info(f"Current schedulability ratio is {sched_ratio}%")
+                        # logger.info(f"Current task set is: {current_taskset}")
+                        current_taskset += 1
 
-                    # # Write BR and WR to csv
-                    # csv_path = os.path.join(output_folder, f"rt_{file_name}")
-                    # csv_file = open(csv_path, "w+")
-                    # writer = csv.writer(csv_file)
+                        #     for j in list_of_jobs:
+                        #         row = [j, BR[j], WR[j]]
+                        #         writer.writerow(row)
 
-                    if SCHED == True:
-                        nrof_schedulable_tasksets += 1
+                        # writer.writerow([f"Schedulable: {SCHED}"])
+                        # csv_file.close()
+                        # logger.info(f"Report saved at {csv_path}!")
+                    end_taskset = time.time()
+                    minutes = int((end_taskset - start_taskset) // 60)
+                    seconds = (end_time - start_time) % 60
+                    logger.info(
+                        f"Analysis took {minutes} minutes {seconds:.1f} seconds for {nrof_tasksets} task sets"
+                    )
 
-                    sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
-                    logger.info(f"Current schedulability ratio is {sched_ratio}%")
-                    # logger.info(f"Current task set is: {current_taskset}")
-                    current_taskset += 1
+                sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
+                logger.info(f"The schedulability ratio is {sched_ratio}%")
 
-                    #     for j in list_of_jobs:
-                    #         row = [j, BR[j], WR[j]]
-                    #         writer.writerow(row)
-
-                    # writer.writerow([f"Schedulable: {SCHED}"])
-                    # csv_file.close()
-                    # logger.info(f"Report saved at {csv_path}!")
-                end_taskset = time.time()
-                minutes = int((end_taskset - start_taskset) // 60)
-                seconds = (end_time - start_time) % 60
-                logger.info(
-                    f"Analysis took {minutes} minutes {seconds:.1f} seconds for {nrof_tasksets} task sets"
-                )
-
-            sched_ratio = nrof_schedulable_tasksets / nrof_tasksets * 100
-            logger.info(f"The schedulability ratio is {sched_ratio}%")
+                with open(
+                    "/home/radu/repos/sag-ros-experiments/SobhaniSAG.csv", "a"
+                ) as fd:
+                    writer = csv.writer(fd)
+                    a = [U, sched_ratio]
+                    writer.writerow(a)
 
     # Write drawio file from job csv
     if args.drawio == True:

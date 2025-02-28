@@ -115,21 +115,17 @@ def ScheduleGraphConstructionAlgorithm(
         def GWS(pp: tuple[int, int], ignore = False):
             pp_min, pp_max = pp
 
-            certainly_ready_timer_jobs = set(
-                [
-                    j
-                    for j in not_dispatched_jobs
-                    # pred(j) = empty
-                    if len(PRED[j]) == 0 and JDICT[j]["r_max"] <= pp_min
-                ]
+            certainly_ready_timer_jobs = set([j for j in not_dispatched_jobs 
+                                              if len(PRED[j]) == 0 and JDICT[j]["r_max"] <= pp_min])
+
+            certainly_ready_sub_jobs = set(s for j in SP.keys() 
+                                           if (SP[j]["LFT"] <= pp_min) or (ignore or SP[j]["siblings"])
+                                           for s in SP[j]["succ"]
             )
 
-            certainly_ready_sub_jobs = set(
-                s 
-                for j in SP.keys() 
-                if SP[j]["LFT"] <= pp_min and (ignore or SP[j]["siblings"])
-                for s in SP[j]["succ"]
-            )
+            # if last_dispatched_job == "J9_11":
+            #     print("######################### (5) ################")
+            #     breakpoint()
 
             return certainly_ready_timer_jobs.union(certainly_ready_sub_jobs)
 
@@ -144,15 +140,15 @@ def ScheduleGraphConstructionAlgorithm(
             # Mitra's Magic formula(ish): \forall j \in SP, if LFT(j) != A_x^{max} \forall x, 1\leq x \leq m, 
             #                              then the successors of j are coupled with any other WS
             coupled = set()
-            for j in SP:
-                yes = True
-                for x in range(m):
-                    A_x_max = A[x][1]
-                    if SP[j]["LFT"] == A_x_max:
-                        yes = False
-                        break
-                if yes:
-                    coupled.update(SP[j]["succ"])
+            # for j in SP:
+            #     yes = True
+            #     for x in range(m):
+            #         A_x_max = A[x][1]
+            #         if SP[j]["LFT"] == A_x_max:
+            #             yes = False
+            #             break
+            #     if yes:
+            #         coupled.update(SP[j]["succ"])
 
             timer_sets = set()
             for k in not_dispatched_jobs:
@@ -208,8 +204,6 @@ def ScheduleGraphConstructionAlgorithm(
                 succ_j = succ(j)
                 pred_j = extract_single_element(PRED[j])
 
-                # if len(SP) == 0:
-                #     breakpoint()
 
                 if pred_j in SP_vp_prime:
                     # Remove the dispatched job from the successors set of its predecessor
@@ -223,11 +217,7 @@ def ScheduleGraphConstructionAlgorithm(
                     else:
                         SP_vp_prime[pred_j]["siblings"] = True
 
-                # for i in SP_vp_prime:
-                #     if len(SP_vp_prime[i]["succ"]) == 0:
-                #         SP_vp_prime.pop(i)
-
-                # New polling point, so we must set the captured flag for all rows in SP
+                # We have a new polling point, so we must set the captured flag for all rows in SP
                 if new_pp:
                     for r in SP_vp_prime:
                         SP_vp_prime[r]["captured"] = True
@@ -286,6 +276,9 @@ def ScheduleGraphConstructionAlgorithm(
                 for job_set in EWS_new if job_set  # only process non-empty job_set
             }
 
+            if "J5_24" in jobs_to_dispatch_new:
+                breakpoint
+
             if len(jobs_to_dispatch_new) == 0:
                 print("######################### (2) ################")
                 breakpoint()
@@ -307,10 +300,13 @@ def ScheduleGraphConstructionAlgorithm(
                 for job_set in EWS_new if job_set  # only process non-empty job_set
             }
             dispatch_jobs(jobs_to_dispatch_new, PP_new, new_pp = True)
+
+            # if "J5_24" in jobs_to_dispatch_new or "J5_24" in jobs_to_dispatch_old:
+            #     breakpoint
             
-            if PP_new == (8, 18):
-                print("######################### (3) ################")
-                breakpoint()
+            # if PP_new == (8, 18):
+            #     print("######################### (3) ################")
+            #     breakpoint()
 
         # Next iteration
         logger.info(len(P))

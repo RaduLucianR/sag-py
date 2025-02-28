@@ -1,5 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
+from networkx.drawing.nx_pydot import write_dot
 import argparse
 import csv
 import time
@@ -78,6 +79,11 @@ def main():
         "--more_tasksets",
         help="PATH_TO_CSV is treated as a path to a folder with CSV files. \
             The algorithm processes all CSV files in the given folder one-by-one.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--dot",
+        help="Save as .dot file for graphviz",
         action="store_true",
     )
     parser.add_argument(
@@ -317,6 +323,32 @@ def main():
         logger.info(f"Saving SAG as PNG...")
         plt.savefig(fig_path, dpi=300, bbox_inches="tight")
         logger.info(f"SAG figure saved at {fig_path}!")
+    
+    if args.dot == True:
+        G_dot = nx.DiGraph()
+    
+        # Process nodes: add a 'label' attribute based on your custom 'state'
+        for node, data in G.nodes(data=True):
+            # Make a shallow copy of node attributes
+            new_data = data.copy()
+            if "state" in new_data:
+                # Convert the custom object to a string (assuming its __str__ or __repr__ is useful)
+                new_data["label"] = str(new_data["state"])
+            # Add the node with the new attributes to the new graph
+            G_dot.add_node(node, **new_data)
+            
+        # Process edges similarly (if you have custom edge attributes)
+        for u, v, data in G.edges(data=True):
+            new_data = data.copy()
+            if "job" in new_data:
+                new_data["label"] = str(new_data["job"])
+            else:
+                new_data["label"] = ""
+            G_dot.add_edge(u, v, **new_data)
+        
+        # Convert the processed graph to a pydot graph and write to a DOT file.
+        p = nx.nx_pydot.to_pydot(G_dot)
+        p.write_dot("sag.dot")
 
 
 if __name__ == "__main__":

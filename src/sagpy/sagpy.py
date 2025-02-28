@@ -162,10 +162,7 @@ def main():
                     PRED[k] = aux_PRED[k]
 
             start_time = time.time()
-            try:  # TODO: This is supper ugly, please fix. All algorithms should output True/False for schedulable or not
-                G, BR, WR, SCHED = algorithm(J, m, JDICT, PRED, logger)
-            except:
-                G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
+            G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
             end_time = time.time()
             minutes = int((end_time - start_time) // 60)
             seconds = (end_time - start_time) % 60
@@ -180,7 +177,7 @@ def main():
             for j in list_of_jobs:
                 row = [j, BR[j], WR[j]]
                 writer.writerow(row)
-            writer.writerow([f"Schedulable: {SCHED}"])
+            # writer.writerow([f"Schedulable: {SCHED}"])
             csv_file.close()
             logger.info(f"BCRT and WCRT saved at {csv_path}!")
 
@@ -305,8 +302,10 @@ def main():
     # Draw SAG and save to file
     if args.png == True:
         num_nodes = len(G.nodes)
-        x = num_nodes * 1.3
-        y = num_nodes * 0.7
+        # x = num_nodes * 1.3
+        # y = num_nodes * 0.7
+        x = 40
+        y = 28
         plt.figure(figsize=(x, y))
         pos = nx.nx_agraph.graphviz_layout(
             G, prog="dot", args="-Gnodesep=1 -Granksep=1"

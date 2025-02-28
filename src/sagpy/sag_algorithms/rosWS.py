@@ -151,10 +151,11 @@ def ScheduleGraphConstructionAlgorithm(
             if parent_state != None
             else set()
         )
-        # Maximum Wait Set i.e. WS with maximum number of jobs in this state
-        MWS = set([Jy for Jy in LP if R_min(Jy) <= PP[1]])
+
         # Minimum Wait Set i.e. WS with minimum number of jobs in this state
         mWS = set([Jy for Jy in LP if R_max(Jy) <= PP[0]])
+        # Maximum Wait Set i.e. WS with maximum number of jobs in this state
+        MWS = set([Jy for Jy in LP if (R_min(Jy) <= PP[1])])
 
         for Ji in R_P:
             r_min = JDICT[Ji]["r_min"]
@@ -219,6 +220,45 @@ def ScheduleGraphConstructionAlgorithm(
                     which_WS = R_P
 
             if dispatch is True:
+
+                def create_new_state(EST_new, LST_new, PP_new):
+                    EFT_new = EST_new + C_min
+                    LFT_new = LST_new + C_max
+
+                    PA = [max(EST_new, A[idx][0]) for idx in range(1, m)]
+                    CA = [max(EST_new, A[idx][1]) for idx in range(1, m)]
+
+                    PA.append(EFT_new)
+                    CA.append(LFT_new)
+
+                    PA.sort()
+                    CA.sort()
+
+                    A_new = [(0, 0) for i in range(m)]
+                    for i in range(m):
+                        A_new[i] = (PA[i], CA[i])
+
+                    X_new = set()
+                    for Jx in v_p.X:
+                        EFTx = v_p.FTI[Jx][0]
+                        if LST_new <= EFTx:
+                            X_new.add(Jx)
+                    X_new.add(Ji)
+
+                    FTI_new = dict()
+                    for Jx in X_new:
+                        if Jx in v_p.FTI:
+                            FTI_new[Jx] = v_p.FTI[Jx]
+                    FTI_new[Ji] = (EFT_new, LFT_new)
+
+                    new_state = StateROS(A_new, X_new, FTI_new, PP_new)
+                    new_state_id = get_rand_node_id()
+                    G.add_node(new_state_id, state=new_state)
+                    G.add_edge(P[-1], new_state_id, job=Ji)
+
+                    BR[Ji] = min(EFT_new - r_min, BR[Ji])
+                    WR[Ji] = max(LFT_new - r_min, WR[Ji])
+
                 ESTi, LSTi, t_high = get_ST(which_WS)
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
@@ -232,11 +272,11 @@ def ScheduleGraphConstructionAlgorithm(
                     logger.info("Not schedulable!")
                     return G, BR, WR, False
 
-                PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
-                CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
+                # PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
+                # CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
 
-                PA.append(EFTi)
-                CA.append(LFTi)
+                # PA.append(EFTi)
+                # CA.append(LFTi)
 
                 # for Jc in X.intersection(PRED[Ji]):
                 #     LFTc = FTI[Jc][1]
@@ -244,79 +284,85 @@ def ScheduleGraphConstructionAlgorithm(
                 #         # TODO: Check if CA.index(LFTc) is correct here
                 #         CA[CA.index(LFTc)] = LSTi
 
-                PA.sort()
-                CA.sort()
+                # PA.sort()
+                # CA.sort()
 
-                new_A = [(0, 0) for i in range(m)]
-                for i in range(m):
-                    new_A[i] = (PA[i], CA[i])
+                # new_A = [(0, 0) for i in range(m)]
+                # for i in range(m):
+                #     new_A[i] = (PA[i], CA[i])
 
-                new_X = set()
-                for Jx in v_p.X:
-                    EFTx = v_p.FTI[Jx][0]
-                    if LSTi <= EFTx:
-                        new_X.add(Jx)
-                new_X.add(Ji)
+                # new_X = set()
+                # for Jx in v_p.X:
+                #     EFTx = v_p.FTI[Jx][0]
+                #     if LSTi <= EFTx:
+                #         new_X.add(Jx)
+                # new_X.add(Ji)
 
-                new_FTI = dict()
-                for Jx in new_X:
-                    if Jx in v_p.FTI:
-                        new_FTI[Jx] = v_p.FTI[Jx]
-                new_FTI[Ji] = (EFTi, LFTi)
+                # new_FTI = dict()
+                # for Jx in new_X:
+                #     if Jx in v_p.FTI:
+                #         new_FTI[Jx] = v_p.FTI[Jx]
+                # new_FTI[Ji] = (EFTi, LFTi)
 
-                new_PP = [0, 0]
-                new_PP2 = [0, 0]
-                new_A_2 = [(0, 0) for i in range(m)]
-                two_states = False
+                # new_PP = [0, 0]
+                # new_PP2 = [0, 0]
+                # new_A_2 = [(0, 0) for i in range(m)]
+                # two_states = False
 
                 if parent_state != None:
                     if Ji in MWS:
                         new_PP = PP
+                        create_new_state(ESTi, LSTi, tuple(new_PP))
                     if (Ji in MWS) and (len(mWS) == 0) and is_eligible(R_P):
-                        EST, LST, t_h = get_ST(R_P)
-                        EFT = EST + C_min
-                        LFT = LST + C_max
-                        new_PP2 = (EST, LST)
+                        EST_R, LST_R, t_h = get_ST(R_P)
+                        create_new_state(EST_R, LST_R, (EST_R, LST_R))
+                        # EFT = EST + C_min
+                        # LFT = LST + C_max
+                        # new_PP2 = (EST, LST)
 
-                        PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
-                        CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
+                        # PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
+                        # CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
 
-                        PA.append(EFT)
-                        CA.append(LFT)
+                        # PA.append(EFT)
+                        # CA.append(LFT)
 
-                        PA.sort()
-                        CA.sort()
+                        # PA.sort()
+                        # CA.sort()
 
-                        for i in range(m):
-                            new_A_2[i] = (PA[i], CA[i])
+                        # for i in range(m):
+                        #     new_A_2[i] = (PA[i], CA[i])
 
-                        two_states = True
-                    if Ji not in MWS:  # if Ji in R_P but Ji *not* in MWS:
-                        new_PP[0] = ESTi
-                        new_PP[1] = LSTi
+                        # two_states = True
+
+                    # if Ji in R_P but Ji *not* in MWS AND GWS EMPTY
+                    if (Ji not in MWS) and (len(mWS) == 0):
+                        # new_PP[0] = ESTi
+                        # new_PP[1] = LSTi
+                        create_new_state(ESTi, LSTi, (ESTi, LSTi))
                 else:
-                    new_PP = PP
+                    # new_PP = PP
+                    create_new_state(ESTi, LSTi, (ESTi, LSTi))
 
-                new_PP = tuple(new_PP)
+                # new_PP = tuple(new_PP)
 
-                if two_states is False:
-                    new_state = StateROS(new_A, new_X, new_FTI, new_PP)
-                    new_state_id = get_rand_node_id()
-                    G.add_node(new_state_id, state=new_state)
-                    G.add_edge(P[-1], new_state_id, job=Ji)
-                else:
-                    new_state = StateROS(new_A, new_X, new_FTI, new_PP)
-                    new_state_id = get_rand_node_id()
-                    G.add_node(new_state_id, state=new_state)
-                    G.add_edge(P[-1], new_state_id, job=Ji)
+                # if two_states is False:
+                #     new_state = StateROS(new_A, new_X, new_FTI, new_PP)
+                #     new_state_id = get_rand_node_id()
+                #     G.add_node(new_state_id, state=new_state)
+                #     G.add_edge(P[-1], new_state_id, job=Ji)
+                # else:
+                #     new_state = StateROS(new_A, new_X, new_FTI, new_PP)
+                #     new_state_id = get_rand_node_id()
+                #     G.add_node(new_state_id, state=new_state)
+                #     G.add_edge(P[-1], new_state_id, job=Ji)
 
-                    new_state = StateROS(new_A_2, new_X, new_FTI, new_PP2)
-                    new_state_id = get_rand_node_id()
-                    G.add_node(new_state_id, state=new_state)
-                    G.add_edge(P[-1], new_state_id, job=Ji)
+                #     new_state = StateROS(new_A_2, new_X, new_FTI, new_PP2)
+                #     new_state_id = get_rand_node_id()
+                #     G.add_node(new_state_id, state=new_state)
+                #     G.add_edge(P[-1], new_state_id, job=Ji)
 
-                BR[Ji] = min(EFTi - r_min, BR[Ji])
-                WR[Ji] = max(LFTi - r_min, WR[Ji])
+                # BR[Ji] = min(EFTi - r_min, BR[Ji])
+                # WR[Ji] = max(LFTi - r_min, WR[Ji])
                 # logger.info(f"job {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
 
         # Next iteration
@@ -328,4 +374,4 @@ def ScheduleGraphConstructionAlgorithm(
     # logger.info(f"BR: {BR}")
     # logger.info(f"WR: {WR}")
 
-    return G, BR, WR, True
+    return G, BR, WR

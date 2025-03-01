@@ -341,7 +341,7 @@ def main():
         for u, v, data in G.edges(data=True):
             new_data = data.copy()
             if "job" in new_data:
-                new_data["label"] = str(new_data["job"])
+                new_data["label"] = f"{new_data["job"]}{new_data["FT"]}"
             else:
                 new_data["label"] = ""
             G_dot.add_edge(u, v, **new_data)

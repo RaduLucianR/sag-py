@@ -3,6 +3,7 @@ import random
 import logging
 from sagpy.sag_template import sag_algorithm
 import copy
+from types import UnionType
 
 
 ######## Utility functions #######
@@ -51,21 +52,23 @@ class State:
     def __init__(
         self,
         A: list[tuple],
-        # X: set,
-        # FTI: dict,
         PP: tuple[int, int],
-        #             succ  EFT  LFT   s     c
-        # SP: dict[tuple[set, int, int, bool, bool]],
         SP: dict,
+        GW: set
     ):
         self.A = A
-        # self.X = X
-        # self.FTI = FTI
         self.PP = PP
         self.SP = SP
+        self.GW = GW
 
     def __repr__(self):
-        return f"{self.A} {self.PP}"
+        sp_str = "\n".join(
+            f"{j}: {self.SP[j]['succ']}, {self.SP[j]['siblings']}, {self.SP[j]['captured']}"
+            for j in self.SP
+        )
+        return f"{self.A} {self.PP}\n{sp_str}"
+
+        # return f"{self.A} {self.PP}"
 
 
 @sag_algorithm
@@ -83,7 +86,7 @@ def ScheduleGraphConstructionAlgorithm(
                 succ_set.add(k)
         return succ_set
 
-    INF = 100000  # Representation for infinity
+    INF = 10000000000  # Representation for infinity
     G = nx.DiGraph()
     BR = {Ji: INF for Ji in J}
     WR = {Ji: 0 for Ji in J}
@@ -92,8 +95,9 @@ def ScheduleGraphConstructionAlgorithm(
 
     ERT0 = min([JDICT[Jy]["r_min"] for Jy in J])
     LRT0 = min([JDICT[Jy]["r_max"] for Jy in J])
-    PP0 = (ERT0, LRT0)
-    InitNode = State([(0, 0) for core in range(m)], PP0, dict())
+    PP1 = (ERT0, LRT0)
+    GW1 = set([j for j in J if len(PRED[j]) == 0 and JDICT[j]["r_max"] <= PP1[0]]) 
+    InitNode = State([(0, 0) for core in range(m)], PP1, dict(), set())
     G.add_node(0, state=InitNode)
 
     P = shortestPathFromSourceToLeaf(G)
@@ -107,10 +111,27 @@ def ScheduleGraphConstructionAlgorithm(
         A = v_p.A
         PP_old = v_p.PP
         SP: dict[tuple[set, int, int, bool, bool]] = v_p.SP
+        GW = v_p.GW
 
         A1 = A[0]
         A1_min = A1[0]
         A1_max = A1[1]
+
+        def idk(j: str): #-> UnionType[0, 1, 2]:
+            counter = 0
+
+            if min(SP[j]["LFT"], A1_max) - max(SP[j]["EFT"], A1_min) > 1:
+                counter += 1
+            else:
+                return 0
+
+            for x in range(1, m):
+                if min(SP[j]["LFT"], A[x][1]) - max(SP[j]["EFT"], A[x][0]) > 1:
+                    counter += 1
+                    if counter == 2:
+                        return 2
+            
+            return counter
 
         def GWS(pp: tuple[int, int], ignore = False):
             pp_min, pp_max = pp
@@ -119,14 +140,19 @@ def ScheduleGraphConstructionAlgorithm(
                                               if len(PRED[j]) == 0 and JDICT[j]["r_max"] <= pp_min])
 
             certainly_ready_sub_jobs = set(s for j in SP.keys() 
-                                           if (SP[j]["LFT"] <= pp_min) or (ignore or SP[j]["siblings"])
+                                           if (SP[j]["LFT"] <= pp_min) 
+                                           or (ignore or SP[j]["siblings"])
+                                        #    or (idk(j) == 1 and ignore == True) 
+                                           or (SP[j]["EFT"] <= pp_min and SP[j]["LFT"] == pp_max) # Jelmer's *BAD* idea
                                            for s in SP[j]["succ"]
             )
 
-            # if last_dispatched_job == "J9_11":
-            #     print("######################### (5) ################")
-            #     breakpoint()
+            # certainly_ready_siblings = set(s for j in SP.keys() 
+            #                                if SP[j]["siblings"] == True
+            #                                for s in SP[j]["succ"]
+            # )
 
+            # return certainly_ready_timer_jobs.union(certainly_ready_sub_jobs.union(certainly_ready_siblings))
             return certainly_ready_timer_jobs.union(certainly_ready_sub_jobs)
 
         def RC(k: str):
@@ -141,6 +167,9 @@ def ScheduleGraphConstructionAlgorithm(
             #                              then the successors of j are coupled with any other WS
             coupled = set()
             # for j in SP:
+            #     if SP[j]["captured"] == False:
+            #         continue
+
             #     yes = True
             #     for x in range(m):
             #         A_x_max = A[x][1]
@@ -166,9 +195,8 @@ def ScheduleGraphConstructionAlgorithm(
             sub_sets = set()
             for k in SP:
                 # if [EFT(k), LFT(k)] intersects [pp_min, pp_max] and k is captured
-                if max(SP[k]["EFT"], pp_min) <= min(SP[k]["LFT"], pp_max) and (ignore or SP[k]["captured"]):
+                if max(SP[k]["EFT"], pp_min) <= min(SP[k]["LFT"], pp_max) and (ignore or (SP[k]["captured"])): #and idk(k) == 2)):
                     succ_set = set(SP[k]["succ"])
-                    # sub_sets.add(frozenset((succ_set.union(RC(k)))))
                     sub_sets.add(frozenset((succ_set.union(RC(k))).union(coupled)))
 
             return timer_sets.union(sub_sets)
@@ -177,10 +205,28 @@ def ScheduleGraphConstructionAlgorithm(
         def EWS(pp, ignore = False):
             GWS_set = GWS(pp, ignore)
             PWS_set = PWS(pp, ignore)
-            return {frozenset(GWS_set.union(S)) for S in PWS_set}
+
+            if len(PWS_set) == 0:
+                return {frozenset(GWS_set)}
+            else:
+                return {frozenset(GWS_set.union(S)) for S in PWS_set}
+
+            # GWS_set = GW
+            # PWS_set = PWS(pp, ignore)
+
+            # if len(PWS_set) == 0:
+            #     return {frozenset(GWS_set)}
+            # else:
+            #     return {frozenset(GWS_set.union(S)) for S in PWS_set}
 
         def dispatch_jobs(jobs, pp, new_pp = False):
             for j in jobs:
+                if new_pp == False and v_p != InitNode:
+                    # j is higher priority than last_dispatched_job
+                    # and we have the same polling point
+                    if JDICT[j]["p"] < JDICT[last_dispatched_job]["p"]:
+                        continue
+
                 PP_vp_prime = pp
                 EST_j = A1_min
                 LST_j = A1_max
@@ -231,10 +277,11 @@ def ScheduleGraphConstructionAlgorithm(
                         "captured": False,
                     }
 
-                new_state = State(A_vp_prime, PP_vp_prime, SP_vp_prime)
+                GW_vp_prime = set()
+                new_state = State(A_vp_prime, PP_vp_prime, SP_vp_prime, GW_vp_prime)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
-                G.add_edge(P[-1], new_state_id, job=j)
+                G.add_edge(P[-1], new_state_id, job=j, FT=(EFT_j,LFT_j))
 
                 for i in SP_vp_prime:
                     if len(SP_vp_prime[i]["succ"]) == 0:
@@ -253,7 +300,11 @@ def ScheduleGraphConstructionAlgorithm(
         GWS_set = GWS(PP_old)
         PWS_set = PWS(PP_old)
 
+        # if A[1][1] == 26:
+        #     breakpoint()
+
         if len(GWS_set) != 0:
+        # if len(GW) != 0:
             EWS_old = EWS(PP_old)
 
             # Highest-priority jobs over some WS in EWS
@@ -268,6 +319,7 @@ def ScheduleGraphConstructionAlgorithm(
             dispatch_jobs(jobs_to_dispatch_old, PP_old)
 
         elif len(GWS_set) == 0 and len(PWS_set) == 0:
+        # elif len(GW) == 0 and len(PWS_set) == 0:
             PP_new = (A1_min, A1_max) # TODO: This is wrong because it doesn't take into account the case when the exec-thread is idle
             EWS_new = EWS(PP_new, ignore = True) ########### NEW PP SO IGNORE FLAGS
 
@@ -304,9 +356,9 @@ def ScheduleGraphConstructionAlgorithm(
             # if "J5_24" in jobs_to_dispatch_new or "J5_24" in jobs_to_dispatch_old:
             #     breakpoint
             
-            # if PP_new == (8, 18):
-            #     print("######################### (3) ################")
-            #     breakpoint()
+            if len(jobs_to_dispatch_old) == 0 or len(jobs_to_dispatch_new) == 0:
+                print("######################### (3) ################")
+                breakpoint()
 
         # Next iteration
         logger.info(len(P))

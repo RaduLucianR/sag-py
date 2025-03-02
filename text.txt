@@ -1,0 +1,29 @@
+that's amazing!
+now let's say we use this algorithm as a subroutine in a state exploration algorithm. We this call this algorithm in each state to find all possible orderings up until the current state. In our DAG where each vertex is a state and each edge is labeled with a task dispatch, it would be inefficient to call this algorithm on the entire path of dispatches. like at one point we *should* know somehow what the first part of the orderings is. in the example:
+Aggregated finish time bounds for each finish ordering (with dispatch order considered):
+t1[3, 3] -> t6[5, 5] -> t2[6, 6] -> t3[8, 8] -> t7[14, 14] -> t4[16, 16] -> t8[22, 22] -> t9[23, 23]
+t1[1, 3] -> t6[5, 11] -> t2[6, 12] -> t3[8, 14] -> t7[14, 20] -> t4[16, 22] -> t9[21, 23] -> t8[22, 34]
+t1[1, 3] -> t6[5, 11] -> t2[6, 14] -> t3[8, 16] -> t7[16, 22] -> t9[21, 23] -> t4[21, 27] -> t8[27, 35]
+t1[1, 3] -> t6[5, 11] -> t2[6, 14] -> t3[8, 18] -> t9[11, 23] -> t4[13, 28] -> t7[14, 30] -> t8[19, 40]
+t1[1, 3] -> t6[5, 11] -> t2[6, 14] -> t3[8, 18] -> t9[11, 21] -> t4[13, 23] -> t8[19, 29] -> t7[20, 30]
+t1[1, 3] -> t6[5, 11] -> t2[6, 14] -> t3[8, 18] -> t9[11, 23] -> t7[14, 28] -> t4[15, 28] -> t8[20, 40]
+t1[1, 3] -> t6[5, 11] -> t2[8, 12] -> t9[11, 13] -> t3[12, 16] -> t4[14, 21] -> t7[17, 25] -> t8[20, 33]
+t1[1, 3] -> t6[5, 11] -> t2[8, 12] -> t9[11, 13] -> t3[12, 16] -> t4[14, 18] -> t8[20, 24] -> t7[23, 25]
+t1[1, 3] -> t6[5, 11] -> t2[8, 12] -> t9[11, 13] -> t3[12, 16] -> t7[17, 19] -> t4[17, 21] -> t8[23, 31]
+t1[1, 3] -> t6[11, 11] -> t9[11, 13] -> t2[12, 14] -> t3[13, 17] -> t4[15, 22] -> t7[18, 26] -> t8[21, 34]
+t1[1, 3] -> t6[11, 11] -> t9[11, 13] -> t2[12, 14] -> t3[13, 17] -> t4[15, 19] -> t8[21, 25] -> t7[24, 26]
+t1[1, 3] -> t6[11, 11] -> t9[11, 13] -> t2[12, 14] -> t3[13, 17] -> t7[18, 20] -> t4[18, 22] -> t8[24, 32]
+t1[1, 1] -> t6[11, 11] -> t9[11, 11] -> t3[13, 13] -> t2[14, 14] -> t4[16, 19] -> t7[19, 25] -> t8[22, 31]
+t1[1, 1] -> t6[11, 11] -> t9[11, 11] -> t3[13, 13] -> t2[14, 14] -> t4[16, 16] -> t8[22, 22] -> t7[25, 25]
+t1[1, 1] -> t6[11, 11] -> t9[11, 11] -> t3[13, 13] -> t2[14, 14] -> t7[19, 19] -> t4[19, 19] -> t8[25, 31]
+
+in our DAG we should know after we dispatch t1 and t6 that they will always be the first two in all subsequent orderings.
+
+so given that we know the dispatch order and that maybe we could store all possible suborderings in each state up until that state, then how can we modify the algorithm to take that into account?
+
+moreover, in each state we already store core availability intervals, i.e., intervals that tell us
+
+that's amazing!
+now let's say we use this algorithm as a subroutine in a state exploration algorithm. We this call this algorithm in each state to find all possible orderings up until the current state. In our DAG where each vertex is a state and each edge is labeled with a task dispatch, in each state we store core availability intervals, i.e., intervals that tell us when x numbers of cores become available. so an interval A[x] would contain the analytical bounds on when x cores become available. for example for A[x][0] = 1 A[x][1] = 5 we know that 1 core (we don't know which one, but they are symmetrical) could possibly be availble, and that 1 core will certainly be available by time 5.
+
+so given that we run the algorithm for orderings in a state that has A[x] intervals for each 1<=x<=m, then we must integrate the information from the As in the algorithm for orderings

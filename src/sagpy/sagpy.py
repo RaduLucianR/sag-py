@@ -87,6 +87,11 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--merge",
+        help="Enable merging of states in the SAG.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--tasks_end_time",
         help="If you want to pass as input a csv with tasks instead of jobs,\
             then set the latest simulation time until which the tool should analyze.",
@@ -168,7 +173,7 @@ def main():
                     PRED[k] = aux_PRED[k]
 
             start_time = time.time()
-            G, BR, WR = algorithm(J, m, JDICT, PRED, logger)
+            G, BR, WR = algorithm(J, m, JDICT, PRED, logger, args.merge)
             end_time = time.time()
             minutes = int((end_time - start_time) // 60)
             seconds = (end_time - start_time) % 60

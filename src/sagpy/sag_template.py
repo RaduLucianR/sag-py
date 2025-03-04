@@ -10,13 +10,14 @@ def sag_algorithm(func):
     """
 
     def wrapper(
-        J: set, m: int, JDICT: dict, PRED: dict, logger: logging.Logger
+        J: set, m: int, JDICT: dict, PRED: dict, logger: logging.Logger, merge: bool
     ) -> tuple[networkx.DiGraph, dict, dict]:
         base_name = "SAG algorithm"
         sig = inspect.signature(func)
         params = sig.parameters
 
-        if list(params.keys()) != ["J", "m", "JDICT", "PRED", "logger"]:
+        if not ((list(params.keys()) == ["J", "m", "JDICT", "PRED", "logger"]) or 
+            (list(params.keys()) == ["J", "m", "JDICT", "PRED", "logger", "merge"])):
             raise TypeError(
                 f"{base_name} must have the following parameters\
                     J: set,\n\
@@ -49,7 +50,7 @@ def sag_algorithm(func):
                 f"{base_name} must return a tuple of type (networkx.DiGraph, dict, dict)"
             )
 
-        return func(J, m, JDICT, PRED, logger)
+        return func(J, m, JDICT, PRED, logger, merge)
 
     wrapper._is_sag_algorithm = True
     return wrapper

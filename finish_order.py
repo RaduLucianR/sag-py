@@ -19,8 +19,11 @@ def dp(current_time, waiting, running):
     if waiting and len(running) < m:
         task_id = waiting[0]
         ft_min, ft_max, exec_min, exec_max, task_dispatch = tasks_info[task_id]
-        new_waiting = waiting[1:]
+
+        if current_time < ft_min - exec_min:
+            return dp(ft_min - exec_min, waiting, running)
         
+        new_waiting = waiting[1:]
         # Calculate the potential finish time interval using current_time and exec bounds.
         start_possible = current_time + exec_min
         end_possible   = current_time + exec_max
@@ -80,49 +83,6 @@ def dp(current_time, waiting, running):
     # Base case: no waiting tasks and no running tasks.
     return {(): {}}
 
-def compute_idle_trigger_tasks(m, dispatch_order, finish_order, finish_times):
-    """
-    Computes the tasks after which at least one core becomes idle based solely on finish orderings.
-    
-    Parameters:
-        m : int
-            Number of cores.
-        dispatch_order : list of str
-            Tasks in the order they were dispatched.
-        finish_order : tuple of str
-            Tasks in the order they finish.
-        finish_times : dict
-            Mapping from task ID to (min_finish, max_finish).
-            
-    Returns:
-        A list of task IDs representing the first finishing group after which a core becomes idle.
-        This group is determined by taking the (n-m+1)-th finish event and including any subsequent tasks 
-        whose finish time intervals overlap with that of the base idle event.
-    """
-    n = len(dispatch_order)
-    # The idle event happens when the finished count reaches (n - m + 1)
-    idle_index = n - m + 1  # using 1-based indexing
-    if idle_index < 1 or idle_index > len(finish_order):
-        return []
-    
-    # Identify the base task (the (n-m+1)-th finish) and its finish interval.
-    base_task = finish_order[idle_index - 1]  # convert to 0-index
-    base_interval = finish_times[base_task]
-    
-    idle_tasks = [base_task]
-    
-    # Check subsequent tasks: if their finish interval overlaps with the base task's interval,
-    # then they could finish concurrently, so add them to the idle group.
-    for task in finish_order[idle_index:]:
-        current_interval = finish_times[task]
-        # Check if intervals overlap:
-        if max(base_interval[0], current_interval[0]) <= min(base_interval[1], current_interval[1]):
-            idle_tasks.append(task)
-        else:
-            break
-            
-    return idle_tasks
-
 def main():
     global m, tasks_info
 
@@ -135,22 +95,15 @@ def main():
         {"id": "t7", "ft": (14, 30), "exec_range": (6, 12)},
         {"id": "t4", "ft": (13, 28), "exec_range": (2, 5)},
         # {"id": "t8", "ft": (19, 40), "exec_range": (6, 12)},
+        # {"id": "t10", "ft": (34, 71), "exec_range": (20, 41)},
+        # {"id": "t5", "ft": (22, 46), "exec_range": (3, 6)},
+        # {"id": "t1_2", "ft": (51, 53), "exec_range": (1, 3)},
     ]
-    # tasks = [
-    #     {"id": "t1", "ft": (1000, 3000),   "exec_range": (1000, 3000)},
-    #     {"id": "t6", "ft": (5000, 11000),  "exec_range": (5000, 11000)},
-    #     {"id": "t9", "ft": (11000, 23000), "exec_range": (10000, 20000)},
-    #     {"id": "t2", "ft": (6000, 14000),  "exec_range": (1000, 3000)},
-    #     {"id": "t3", "ft": (8000, 18000),  "exec_range": (2000, 4000)},
-    #     {"id": "t7", "ft": (14000, 30000), "exec_range": (6000, 12000)},
-    #     {"id": "t4", "ft": (13000, 28000), "exec_range": (2000, 5000)},
-    #     {"id": "t8", "ft": (19000, 40000), "exec_range": (6000, 12000)},
-    # ]
-    
+
     m = 2  # number of cores
 
     # Known dispatch order.
-    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7", "t4"]#, "t8"]
+    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7", "t4"]#, "t8", "t10", "t5"]#, "t1_2"]
     dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
     
     # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)
@@ -171,16 +124,8 @@ def main():
     print(dispatch_order)
     for order in sorted(ordering_bounds):
         bounds = ordering_bounds[order]
-        idle_tasks = compute_idle_trigger_tasks(m, dispatch_order, order, bounds)
         order_str = " -> ".join(f"{tid}[{bounds[tid][0]}, {bounds[tid][1]}]" for tid in order)
         print(order_str)
-        print("Tasks after which at least one core becomes idle:", idle_tasks)
-
-    # PP = (11, 23)
-    # A = [(14, 30), (19, 40)]
-    # print(A, PP)
-
-
 
 if __name__ == "__main__":
     start = time.time()

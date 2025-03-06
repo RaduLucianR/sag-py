@@ -87,6 +87,7 @@ def ScheduleGraphConstructionAlgorithm(
     JDICT: dict,
     PRED: dict,
     logger=logging.Logger("SAGPY", logging.CRITICAL),
+    merge=False
 ) -> tuple[nx.DiGraph, dict, dict]:
     ############## Init ################
     INF = 10000000000000000000000000  # Representation for infinity
@@ -256,8 +257,65 @@ def ScheduleGraphConstructionAlgorithm(
                     G.add_node(new_state_id, state=new_state)
                     G.add_edge(P[-1], new_state_id, job=Ji)
 
-                    BR[Ji] = min(EFT_new - r_min, BR[Ji])
-                    WR[Ji] = max(LFT_new - r_min, WR[Ji])
+                    BR[Ji] = min(EFT_new, BR[Ji])
+                    WR[Ji] = max(LFT_new, WR[Ji])
+
+                    if merge == True:
+                        vp_prime = G.nodes[new_state_id]["state"]
+                        J_P_prime = J_P.union(set([Ji]))
+                        leaves = [node for node in G.nodes if G.out_degree(node) == 0 and node != new_state_id]
+                        paths_to_leaves = []
+                        for leaf in leaves:
+                            pf = nx.shortest_path(G, source=0, target=leaf)
+                            paths_to_leaves.append(pf)
+                        # breakpoint()
+                        for Q in paths_to_leaves:
+                            ####### Info from v on path Q ######
+                            J_Q = set([G[u][v]["job"] for u, v in zip(Q[:-1], Q[1:])])
+                            v_q = G.nodes[Q[-1]]["state"]
+                            A_vq = v_q.A
+                            PP_vq = v_q.PP
+                            X_vq = v_q.X
+                            FTI_vq = v_q.FTI
+                            # breakpoint()
+                            ###### Merge condition ######
+                            if J_Q != J_P_prime:
+                                continue
+                            
+                            all_A_intersect = True
+                            for x in range(m):
+                                if not (max(vp_prime.A[x][0], A_vq[x][0]) <= min(vp_prime.A[x][1], A_vq[x][1])):
+                                    all_A_intersect = False
+                                    break
+                            if all_A_intersect == False:
+                                continue
+
+                            if not (max(vp_prime.PP[0], PP_vq[0]) <= min(vp_prime.PP[1], PP_vq[1])):
+                                continue
+                            
+                            ####### Widen intervals #########
+                            for x in range(m):
+                                widened_A = (min(vp_prime.A[x][0], A_vq[x][0]), max(vp_prime.A[x][1], A_vq[x][1]))
+                                vp_prime.A[x] = widened_A
+                            
+                            widened_PP = (min(vp_prime.PP[0], PP_vq[0]), max(vp_prime.PP[1], PP_vq[1]))
+                            vp_prime.PP = widened_PP
+
+                            vp_prime.X = vp_prime.X.intersection(X_vq)
+
+                            for k in vp_prime.X:
+                                widened_FT = (min(vp_prime.FT[k][0], FTI_vq[k][0]), max(vp_prime.FT[k][1], FTI_vq[k][1]))
+                                vp_prime.FT[k] = widened_FT
+                            
+                            ####### Redirect incoming edges from v_q to v_p' #######
+                            v_q_id = Q[-1]
+                            in_edges = list(G.in_edges(v_q_id, data=True))
+                            for source, target, data in in_edges:
+                                # Add the edge with the same attributes.
+                                G.add_edge(source, new_state_id, **data)
+                            
+                            ####### Remove v_q and all its adjacent edges ########
+                            G.remove_node(v_q_id)
 
                 ESTi, LSTi, t_high = get_ST(which_WS)
                 EFTi = ESTi + C_min

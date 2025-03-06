@@ -132,7 +132,7 @@ def main():
     tasks_info["t4"] = (13, 28, 2, 5, 6)
 
     m = 2  # number of cores
-    dispatch_order = ("t1", "t6", "t9", "t2")#, "t3", "t7")#, "t4", "t8")
+    dispatch_order = ("t1",)# "t6", "t9", "t2")#, "t3", "t7")#, "t4", "t8")
     initial_state = (0, dispatch_order, (), (), {})
 
     print("All possible finish orderings for dispatch sequence: ")

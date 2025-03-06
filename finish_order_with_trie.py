@@ -121,7 +121,7 @@ def main():
     tasks_info["t4"] = (13, 28, 2, 5, 6)
 
     m = 2  # number of cores
-    dispatch_order = ("t1", "t6")#, "t9", "t2")
+    dispatch_order = ("t1",)# "t6")#, "t9", "t2")
     # dispatch_order = ()
     initial_state = (0, dispatch_order, (), (), {})
 
@@ -130,17 +130,17 @@ def main():
     final_results_trie, inter = bottom_up_dp_from_state([initial_state], m=m)
     print_ordering_bounds_trie(final_results_trie)
     
+    new_dispatch = 't6'
+    print(f"\nDispatch {new_dispatch}")
+    res_trie, inter = extend_dp_states(inter, new_dispatch, m=m)
+    print_ordering_bounds_trie(res_trie)
+    
     new_dispatch = 't9'
     print(f"\nDispatch {new_dispatch}")
     res_trie, inter = extend_dp_states(inter, new_dispatch, m=m)
     print_ordering_bounds_trie(res_trie)
     
     new_dispatch = 't2'
-    print(f"\nDispatch {new_dispatch}")
-    res_trie, inter = extend_dp_states(inter, new_dispatch, m=m)
-    print_ordering_bounds_trie(res_trie)
-    
-    new_dispatch = 't3'
     print(f"\nDispatch {new_dispatch}")
     res_trie, inter = extend_dp_states(inter, new_dispatch, m=m)
     print_ordering_bounds_trie(res_trie)

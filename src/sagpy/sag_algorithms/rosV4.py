@@ -515,8 +515,8 @@ def ScheduleGraphConstructionAlgorithm(
                             continue
                         
                         ############## THIS MIGHT MAKE THE ANALYSIS WRONG/UNSAFE IF LEFT UNCOMMENTED ############
-                        # if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
-                        #     continue
+                        if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
+                            continue
                         
                         ####### Widen intervals #########
                         for x in range(m):
@@ -655,9 +655,9 @@ def ScheduleGraphConstructionAlgorithm(
             # breakpoint()
             dispatch_jobs(jobs_to_dispatch_new, PP_new, new_pp = True, new_gws = GWS_set_new)
             
-            # if len(jobs_to_dispatch_old) == 0 or len(jobs_to_dispatch_new) == 0:
-            #     print("######################### (3) ################")
-            #     breakpoint()
+            if len(jobs_to_dispatch_old) == 0 or len(jobs_to_dispatch_new) == 0:
+                print("######################### (3) ################")
+                breakpoint()
 
         # Next iteration
         logger.info(f"MAX PATH LENGTH = {len(P)} and the graph has {G.number_of_nodes()} vertices")

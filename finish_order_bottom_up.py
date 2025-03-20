@@ -99,19 +99,52 @@ def bottom_up_dp(initial_time, waiting, running, m):
         states = new_states
     return final_results
 
+def doesInters(int1, int2):
+    lb = max(int1[0], int2[0])
+    ub = min(int1[1], int2[1])
+    return lb <= ub
+
+def inters(int1, int2):
+    lb = max(int1[0], int2[0])
+    ub = min(int1[1], int2[1])
+    return lb, ub
+
+def JTP(tasks_info, dispatch_order, A1, m):
+    JTP_set = set()
+    B = [j for j in tasks_info if j["id"] in dispatch_order and doesInters(j["ft"], A1)]
+    print("B is ", B)
+
+    for j in B:
+        count = 0
+
+        for k in dispatch_order[dispatch_order.index(j["id"]) + 1:]:
+            i = inters(j["ft"], A1)
+            ETk = next((item['exec_range'] for item in tasks_info if item['id'] == k), None)
+            st = (i[0] - ETk[0], i[1] - ETk[1])
+
+            if st[0] > st[1]:
+                count += 1
+
+        print(f"For j={j["id"]} we have count={count}")
+        if count < m:
+            JTP_set.add(j["id"])
+    
+    print(JTP_set)
+    return JTP_set
+
 def main():
     global m, tasks_info
 
     tasks = [
         {"id": "t1", "ft": (1, 3),   "exec_range": (1, 3)},
         {"id": "t6", "ft": (5, 11),  "exec_range": (5, 11)},
-        {"id": "t9", "ft": (11, 23), "exec_range": (10, 20)},
+        {"id": "t9", "ft": (11, 26), "exec_range": (10, 20)},
         {"id": "t2", "ft": (6, 14),  "exec_range": (1, 3)},
         {"id": "t3", "ft": (8, 18),  "exec_range": (2, 4)},
         {"id": "t7", "ft": (14, 30), "exec_range": (6, 12)},
-        # {"id": "t4", "ft": (13, 28), "exec_range": (2, 5)},
-        # {"id": "t8", "ft": (19, 40), "exec_range": (6, 12)},
-        # {"id": "t10", "ft": (34, 71), "exec_range": (20, 41)},
+        {"id": "t4", "ft": (13, 28), "exec_range": (2, 5)},
+        # # {"id": "t8", "ft": (19, 40), "exec_range": (6, 12)},
+        # {"id": "t10", "ft": (31, 64), "exec_range": (20, 41)},
         # {"id": "t5", "ft": (22, 46), "exec_range": (3, 6)},
         # {"id": "t1_2", "ft": (51, 53), "exec_range": (1, 3)},
     ]
@@ -129,7 +162,7 @@ def main():
     m = 2  # number of cores
 
     # Known dispatch order.
-    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7"]#, "t4"]#, "t8", "t10", "t5"]#, "t1_2"]
+    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7", "t4"]#, "t10"]#, "t5"]#, "t1_2"]
     dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
     
     # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)
@@ -139,6 +172,9 @@ def main():
         ft_min, ft_max = task["ft"]
         exec_min, exec_max = task["exec_range"]
         tasks_info[tid] = (ft_min, ft_max, exec_min, exec_max, dispatch_index[tid])
+
+    # JTP(tasks, dispatch_order, (11, 23), 2)
+    # return
     
     waiting = tuple(dispatch_order)
     running = tuple()

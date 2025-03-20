@@ -367,7 +367,8 @@ def ScheduleGraphConstructionAlgorithm(
             sub_sets = set()
             for k in sp:
                 # if [EFT(k), LFT(k)] intersects [pp_min, pp_max] and k is captured
-                if max(sp[k]["EFT"], pp_min) <= min(sp[k]["LFT"], pp_max) and (sp[k]["captured"]):
+                if ((max(sp[k]["EFT"], pp_min) <= min(sp[k]["LFT"], pp_max)#  or sp[k]["LFT"] <= pp_min) 
+                    and (sp[k]["captured"]))):
                     succ_set = set(sp[k]["succ"])
                     sub_sets.add(frozenset((succ_set.union(RC(k, sp)))))
 
@@ -460,35 +461,91 @@ def ScheduleGraphConstructionAlgorithm(
                         "captured": False,
                     }
 
+                Z_old_prime = set()
+                Z_new_prime = set()
+                # breakpoint()
                 if new_pp == False:
                     GW_vp_prime = copy.deepcopy(GW) if j not in GW else GW.difference(set([j]))
                     
-                    a = J_P.union(set[j])
-                    Z: set = Z_new.union(Z_old)
-                    if len(a) <= m and G.nodes[0]["state"].PP == PP_vp_prime:
-                        Z_new_prime = a
+                    ################ Z #############
+                    curr_job = j
+                    aux_set = J_P.union(set([j]))
+                    if len(aux_set) <= m and G.nodes[0]["state"].PP == PP_vp_prime:
+                        Z_new_prime = aux_set
                         Z_old_prime = set()
                     else:
+                        Z_new_prime = Z_new
+                        Z_old_prime = Z_old
+                        for k in Z_new.union(Z_old):
+                            for idx in Z_new.union(Z_old).difference(set([k])):
+                                if FT[k][1] <= FT[idx][0]:
+                                    if k in Z_new:
+                                        Z_new_prime = Z_new.difference(set([k]))
+                                    elif k in Z_old:
+                                        Z_old_prime = Z_old.difference(set([k]))
+                                    break
                         j_can_be_put_in_Z = True
-                        for k in Z:
+                        for k in Z_new_prime.union(Z_old_prime):
                             if not (max(FT[k][0], EFT_j) <= min(FT[k][1], LFT_j)):
                                 j_can_be_put_in_Z = False
                         if j_can_be_put_in_Z == True:
-                            for k in Z:
-                                for l in Z.difference(set([k])):
-                                    if FT[k][1] <= FT[l][0]:
-                                        if k in Z_new:
-                                            Z_new_prime = Z_new.difference(set([k]))
-                                        elif k in Z_old:
-                                            Z_old_prime = Z_old.difference(set([k]))
-                                        break
                             Z_new_prime = Z_new_prime.union(set([j]))
-                            
+                        Z_all_db = Z_new_prime.union(Z_old_prime)
+                    # breakpoint()
                 else:
                     GW_vp_prime = new_gws.difference(set([j]))
 
+                    in_priority_order = sorted(Z_new, key=lambda k: JDICT[k]["p"])
+                    PO = dict()
+                    counter = 1
+                    for k in in_priority_order:
+                        PO[k] = counter
+                        counter += 1
+                    print(PO)
+                    card_Z = len(Z_old) + len(Z_new)
+                    
+                    def if_r_triggers_pp_then_these_jobs_finish_before_pp(r: str, m: int):
+                        jobs = set()
 
-                new_state = State(A_vp_prime, PP_vp_prime, SP_vp_prime, GW_vp_prime, FT_vp_prime, Z_new_prime, Z_old_prime)
+                        if r in PO:
+                            for k in PO:
+                                if PO[k] < PO[r]:
+                                    jobs.add(k)
+                        else:
+                            counter = 0
+                            for k in PO:
+                                # TODO: add an 'if' -> if FT(k) \cap FT(j) != \varnothing
+                                if counter < m:
+                                    jobs.add(k)
+                                    counter += 1
+                        
+                        if len(jobs) < card_Z - m:
+                            for k in Z_old:
+                                jobs.add(k)
+                        
+                        if len(jobs) < card_Z - m:
+                            counter = len(jobs)
+                            for k in PO:
+                                if r != k and counter < card_Z - m:
+                                    jobs.add(k)
+                                    counter += 1
+                        
+                        return jobs.union(set([r]))
+
+                    all_possible_finished = []
+                    for r in dispatch_order:
+                        alpha = if_r_triggers_pp_then_these_jobs_finish_before_pp(r, m)
+                        all_possible_finished.append(alpha)
+                    
+                    certainly_finished = set.intersection(*all_possible_finished)
+                    Z_old_prime = Z_new.difference(certainly_finished)
+                    Z_new_prime = set([j])
+                    the_curr_job = j
+                    Z_all_db = Z_new_prime.union(Z_old_prime)
+                    # breakpoint()
+                    
+
+                new_state = State(A_vp_prime, PP_vp_prime, SP_vp_prime, GW_vp_prime, FT_vp_prime, Z_old_prime, Z_new_prime)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=j, FT=(EFT_j,LFT_j))
@@ -544,8 +601,8 @@ def ScheduleGraphConstructionAlgorithm(
                             continue
                         
                         ############## THIS MIGHT MAKE THE ANALYSIS WRONG/UNSAFE IF LEFT UNCOMMENTED ############
-                        # if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
-                        #     continue
+                        if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
+                            continue
                         
                         ####### Widen intervals #########
                         for x in range(m):
@@ -692,7 +749,7 @@ def ScheduleGraphConstructionAlgorithm(
         logger.info(f"MAX PATH LENGTH = {len(P)} and the graph has {G.number_of_nodes()} vertices")
         P = shortestPathFromSourceToLeaf(G)
 
-        # if (len(P) == 13):
+        # if (len(P) == 9):
         #     break
 
     return G, BR, WR

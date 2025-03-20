@@ -56,6 +56,7 @@ def ScheduleGraphConstructionAlgorithm(
     JDICT: dict,
     PRED: dict,
     logger=logging.Logger("SAGPY", logging.CRITICAL),
+    merge = False
 ) -> tuple[nx.DiGraph, dict, dict]:
     INF = 100000  # Representation for infinity
     G = nx.DiGraph()

@@ -209,6 +209,7 @@ class State:
         # return f"{self.A} {self.PP}\n{ft_str}\n{self.GW}"
         # return f"{self.A} {self.PP}\n{sp_str}\n{self.GW}"
         # return f"{self.A} {self.PP} GWS={self.GW}"
+        return f"{self.A}"
         return f"{self.A} {self.PP}"
 
 ################### Algorithm #################
@@ -546,7 +547,9 @@ def ScheduleGraphConstructionAlgorithm(
         GWS_set_old = GW
         PWS_set_old = PWS(PP_old, SP)
         get_possible_succ()
-        print(last_dispatched_job)
+        # print(last_dispatched_job)
+        # if last_dispatched_job == "J7_28":
+        #     breakpoint()
         # breakpoint()
 
         ############# Decision making ###################
@@ -593,13 +596,13 @@ def ScheduleGraphConstructionAlgorithm(
                 min(job_set, key=lambda j: JDICT[j]["p"])
                 for job_set in EWS_new if job_set  # only process non-empty job_set
             }
-            # HP_SUCC_in_a_WS = {
-            #     min(job_set, key=lambda j: JDICT[j]["p"])
-            #     for job_set in ALL_POSSIBLE_SUCC 
-            #     if job_set # only process non-empty job_set
-            # }
+            HP_SUCC_in_a_WS = {
+                min(job_set, key=lambda j: JDICT[j]["p"])
+                for job_set in ALL_POSSIBLE_SUCC 
+                if job_set # only process non-empty job_set
+            }
             # # Filter invalid jobs gotten from the previous equations
-            # jobs_to_dispatch_new = {j for j in jobs_to_dispatch_new if (len(PRED[j]) == 0) or (j in HP_SUCC_in_a_WS)}
+            jobs_to_dispatch_new = {j for j in jobs_to_dispatch_new if (len(PRED[j]) == 0) or (j in HP_SUCC_in_a_WS)}
 
             if len(jobs_to_dispatch_new) == 0:
                 print("######################### (2) ################")

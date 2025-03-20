@@ -87,23 +87,28 @@ def main():
     global m, tasks_info
 
     tasks = [
-        {"id": "t1", "ft": (1, 6),   "exec_range": (1, 6)},
+        {"id": "t1", "ft": (1, 3),   "exec_range": (1, 3)},
         {"id": "t6", "ft": (5, 11),  "exec_range": (5, 11)},
-        {"id": "t9", "ft": (11, 26), "exec_range": (10, 20)},
+        {"id": "t9", "ft": (11, 23), "exec_range": (0, 20)},
         {"id": "t2", "ft": (6, 14),  "exec_range": (1, 3)},
-        # {"id": "t3", "ft": (8, 18),  "exec_range": (2, 4)},
-        # {"id": "t7", "ft": (14, 30), "exec_range": (6, 12)},
-        # # {"id": "t4", "ft": (13, 28), "exec_range": (2, 5)},
-        # {"id": "t8", "ft": (19, 40), "exec_range": (6, 12)},
-        # {"id": "t10", "ft": (34, 71), "exec_range": (20, 41)},
-        # {"id": "t5", "ft": (22, 46), "exec_range": (3, 6)},
-        # {"id": "t1_2", "ft": (51, 53), "exec_range": (1, 3)},
+        {"id": "t3", "ft": (8, 18),  "exec_range": (2, 4)},
+        {"id": "t7", "ft": (14, 30), "exec_range": (6, 12)},
+        {"id": "t10", "ft": (31, 64), "exec_range": (20, 41)},
+
+        # {"id": "t3", "ft": (13, 27),  "exec_range": (2, 4)},
+        # {"id": "t7", "ft": (12, 26), "exec_range": (6, 12)},
+
+        # {"id": "t3", "ft": (12, 27),  "exec_range": (2, 4)},
+        # {"id": "t7", "ft": (12, 26), "exec_range": (6, 12)},
+
+        # {"id": "t3", "ft": (10, 27),  "exec_range": (2, 4)},
+        # {"id": "t7", "ft": (8, 26), "exec_range": (2, 12)},
     ]
 
     m = 2  # number of cores
 
     # Known dispatch order.
-    dispatch_order = ["t1", "t6", "t9", "t2"]#, "t3", "t7"]#, "t4"]#, "t8", "t10", "t5"]#, "t1_2"]
+    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7", "t10"]#, "t4"]#, "t8", "t10", "t5"]#, "t1_2"]
     dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
     
     # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)

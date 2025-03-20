@@ -199,6 +199,7 @@ class State:
             f"{j}: [{self.SP[j]['EFT']}, {self.SP[j]['LFT']}] {self.SP[j]['succ']}, {self.SP[j]['siblings']}, {self.SP[j]['captured']}"
             for j in self.SP
         )
+        return f"{self.A}"
         return f"{self.A} {self.PP}\n{sp_str}"
 
         return f"{self.A} {self.PP}"
@@ -297,32 +298,32 @@ def ScheduleGraphConstructionAlgorithm(
         def GWS(pp: tuple[int, int], sp, new_pp = False):
             certain_gws = set()
             if new_pp == True:
-                global job_info
-                dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
-                # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)
-                job_info = {}
-                for job in dispatch_order:
-                    ft_min, ft_max = FT[job]
-                    exec_min, exec_max = JDICT[job]["C_min"], JDICT[job]["C_max"]
-                    job_info[job] = (ft_min, ft_max, exec_min, exec_max, dispatch_index[job])
-                waiting = tuple(dispatch_order)
-                running = tuple()
-                dp.cache_clear()
+                # global job_info
+                # dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
+                # # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)
+                # job_info = {}
+                # for job in dispatch_order:
+                #     ft_min, ft_max = FT[job]
+                #     exec_min, exec_max = JDICT[job]["C_min"], JDICT[job]["C_max"]
+                #     job_info[job] = (ft_min, ft_max, exec_min, exec_max, dispatch_index[job])
+                # waiting = tuple(dispatch_order)
+                # running = tuple()
+                # dp.cache_clear()
                 
+                # # ordering_bounds = dp(0, waiting, running, m)
+                # start_time = time.perf_counter()
                 # ordering_bounds = dp(0, waiting, running, m)
-                start_time = time.perf_counter()
-                ordering_bounds = dp(0, waiting, running, m)
-                end_time = time.perf_counter()
-                elapsed_time = end_time - start_time
-                with open('FT_orderings_timings.csv', 'a', newline='') as csvfile:
-                    writer = csv.writer(csvfile)
-                    writer.writerow([len(waiting), elapsed_time])
+                # end_time = time.perf_counter()
+                # elapsed_time = end_time - start_time
+                # with open('FT_orderings_timings.csv', 'a', newline='') as csvfile:
+                #     writer = csv.writer(csvfile)
+                #     writer.writerow([len(waiting), elapsed_time])
 
                 certain_succ_each_order = []
-                for order in ordering_bounds:
-                    bounds = ordering_bounds[order]
-                    order_certain_succ = compute_certain_successors(m ,dispatch_order, order, bounds, SP, pp)
-                    certain_succ_each_order.append(order_certain_succ)
+                # for order in ordering_bounds:
+                #     bounds = ordering_bounds[order]
+                #     order_certain_succ = compute_certain_successors(m ,dispatch_order, order, bounds, SP, pp)
+                #     certain_succ_each_order.append(order_certain_succ)
                 # print("############# ORDERINGS ###############")
                 # for c in ordering_bounds:
                 #     print(c, ordering_bounds[c])
@@ -391,7 +392,9 @@ def ScheduleGraphConstructionAlgorithm(
             sub_sets = set()
             for k in sp:
                 # if [EFT(k), LFT(k)] intersects [pp_min, pp_max] and k is captured
-                if max(sp[k]["EFT"], pp_min) <= min(sp[k]["LFT"], pp_max) and (sp[k]["captured"]):
+                # OR LFT(k) <= pp_min which is the condition for GWS, but without it this is incorrect because lower priority jobs would be ignored in WaitSets with hp jobs, even though they would be alone in a WaitSet
+                # TODO: UPDATE THE FORMULAS BECAUSE THIS WAS WRONG
+                if (max(sp[k]["EFT"], pp_min) <= min(sp[k]["LFT"], pp_max) or sp[k]["LFT"] <= pp_min) and (sp[k]["captured"]):
                     succ_set = set(sp[k]["succ"])
                     sub_sets.add(frozenset((succ_set.union(RC(k, sp))).union(coupled)))
 
@@ -463,9 +466,12 @@ def ScheduleGraphConstructionAlgorithm(
                         SP_vp_prime[pred_j]["siblings"] = True
 
                 # We have a new polling point, so we must set the captured flag for all rows in SP
-                if new_pp:
-                    for r in SP_vp_prime:
-                        SP_vp_prime[r]["captured"] = True
+                # TODO: acutally this is wrong! Only the successors of those jobs that certainly finished can have the captured flag high
+                # actually, it's wrong to set it aparently? it cuts too many cases, idk how
+                # if new_pp:
+                #     for r in SP_vp_prime:
+                #         # if SP_vp_prime[r]["LFT"] <= PP_vp_prime[0]:
+                #         SP_vp_prime[r]["captured"] = True   
 
                 if len(succ_j) != 0:
                     SP_vp_prime[j] = {
@@ -540,8 +546,8 @@ def ScheduleGraphConstructionAlgorithm(
                             continue
                         
                         ############## THIS MIGHT MAKE THE ANALYSIS WRONG/UNSAFE IF LEFT UNCOMMENTED ############
-                        if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
-                            continue
+                        # if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
+                        #     continue
                         
                         ####### Widen intervals #########
                         for x in range(m):
@@ -568,8 +574,8 @@ def ScheduleGraphConstructionAlgorithm(
         #################################################
         ############## ACTUAL ALGORITHM #################
         #################################################
-        # GWS_set_old = GWS(PP_old, SP)
-        GWS_set_old = GW
+        GWS_set_old = GWS(PP_old, SP)
+        # GWS_set_old = GW
         PWS_set_old = PWS(PP_old, SP)
         # print(last_dispatched_job)
         # breakpoint()
@@ -608,8 +614,12 @@ def ScheduleGraphConstructionAlgorithm(
                 PP_min_new = A1_min
                 PP_max_new = A1_max
 
+            # breakpoint()
             PP_new = (PP_min_new, PP_max_new)
-            SP_new = get_new_SP()
+            # SP_new = get_new_SP()
+            for j in SP:
+                SP[j]["captured"] = True
+            SP_new = SP
             GWS_set_new = GWS(PP_new, SP_new, new_pp = True)
             PWS_set_new = PWS(PP_new, SP_new)
             EWS_new = EWS(GWS_set_new, PWS_set_new)
@@ -656,7 +666,10 @@ def ScheduleGraphConstructionAlgorithm(
                 PP_max_new = A1_max
 
             PP_new = (PP_min_new, PP_max_new)
-            SP_new = get_new_SP()
+            # SP_new = get_new_SP()
+            for j in SP:
+                SP[j]["captured"] = True
+            SP_new = SP
             GWS_set_new = GWS(PP_new, SP_new, new_pp = True)
             PWS_set_new = PWS(PP_new, SP_new)
             EWS_new = EWS(GWS_set_new, PWS_set_new)
@@ -676,7 +689,7 @@ def ScheduleGraphConstructionAlgorithm(
         logger.info(f"Max path length: {len(P)},  Number of nodes in graph : {counter}")
         P = shortestPathFromSourceToLeaf(G)
 
-        # if (len(P) == 13):
+        # if (len(P) == 9):
         #     break
 
     return G, BR, WR

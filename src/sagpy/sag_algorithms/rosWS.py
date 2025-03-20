@@ -89,6 +89,7 @@ def ScheduleGraphConstructionAlgorithm(
     logger=logging.Logger("SAGPY", logging.CRITICAL),
     merge=False
 ) -> tuple[nx.DiGraph, dict, dict]:
+    print(f"m={m}")
     ############## Init ################
     INF = 10000000000000000000000000  # Representation for infinity
     G = nx.DiGraph()
@@ -203,17 +204,6 @@ def ScheduleGraphConstructionAlgorithm(
                 if is_eligible(BWS) is True:
                     dispatch = True
                     which_WS = BWS
-                # max_LST = 0
-                # all_WS = subsets_with_constraint(MWS, set([Ji]).union(mWS))
-
-                # for WS in all_WS:
-                #     if is_eligible(WS) is True:
-                #         dispatch = True
-                #         lst = get_ST(WS)[1]
-
-                #         if lst > max_LST:
-                #             max_LST = lst
-                #             which_WS = WS
 
             elif Ji in R_P and len(mWS) == 0:
                 if is_eligible(R_P) is True:
@@ -221,6 +211,8 @@ def ScheduleGraphConstructionAlgorithm(
                     which_WS = R_P
 
             if dispatch is True:
+                # breakpoint()
+                
 
                 def create_new_state(EST_new, LST_new, PP_new):
                     EFT_new = EST_new + C_min
@@ -257,8 +249,10 @@ def ScheduleGraphConstructionAlgorithm(
                     G.add_node(new_state_id, state=new_state)
                     G.add_edge(P[-1], new_state_id, job=Ji)
 
-                    BR[Ji] = min(EFT_new, BR[Ji])
-                    WR[Ji] = max(LFT_new, WR[Ji])
+                    # BR[Ji] = min(EFT_new, BR[Ji])
+                    # WR[Ji] = max(LFT_new, WR[Ji])
+                    BR[Ji] = EFT_new
+                    WR[Ji] = LFT_new
 
                     if merge == True:
                         vp_prime = G.nodes[new_state_id]["state"]
@@ -304,8 +298,8 @@ def ScheduleGraphConstructionAlgorithm(
                             vp_prime.X = vp_prime.X.intersection(X_vq)
 
                             for k in vp_prime.X:
-                                widened_FT = (min(vp_prime.FT[k][0], FTI_vq[k][0]), max(vp_prime.FT[k][1], FTI_vq[k][1]))
-                                vp_prime.FT[k] = widened_FT
+                                widened_FT = (min(vp_prime.FTI[k][0], FTI_vq[k][0]), max(vp_prime.FTI[k][1], FTI_vq[k][1]))
+                                vp_prime.FTI[k] = widened_FT
                             
                             ####### Redirect incoming edges from v_q to v_p' #######
                             v_q_id = Q[-1]
@@ -321,51 +315,19 @@ def ScheduleGraphConstructionAlgorithm(
                 EFTi = ESTi + C_min
                 LFTi = LSTi + C_max
 
+                # if Ji == "J5_25":
+                if LFTi > 153119 and Ji == "J5_25":
+                    print([G[u][v]["job"] for u, v in zip(P[:-1], P[1:])])
+                    breakpoint()
+
                 # if LFTi == 6:
                 #     breakpoint()
 
-                if LFTi > d_i:  # Check if this job doesn't have a deadline miss
-                    # If it misses the deadline, then the job set is NOT schedulable
-                    # So no need to check the rest of the paths, just return
-                    logger.info("Not schedulable!")
-                    return G, BR, WR, False
-
-                # PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
-                # CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
-
-                # PA.append(EFTi)
-                # CA.append(LFTi)
-
-                # for Jc in X.intersection(PRED[Ji]):
-                #     LFTc = FTI[Jc][1]
-                #     if LSTi < LFTc and LFTc in CA:
-                #         # TODO: Check if CA.index(LFTc) is correct here
-                #         CA[CA.index(LFTc)] = LSTi
-
-                # PA.sort()
-                # CA.sort()
-
-                # new_A = [(0, 0) for i in range(m)]
-                # for i in range(m):
-                #     new_A[i] = (PA[i], CA[i])
-
-                # new_X = set()
-                # for Jx in v_p.X:
-                #     EFTx = v_p.FTI[Jx][0]
-                #     if LSTi <= EFTx:
-                #         new_X.add(Jx)
-                # new_X.add(Ji)
-
-                # new_FTI = dict()
-                # for Jx in new_X:
-                #     if Jx in v_p.FTI:
-                #         new_FTI[Jx] = v_p.FTI[Jx]
-                # new_FTI[Ji] = (EFTi, LFTi)
-
-                # new_PP = [0, 0]
-                # new_PP2 = [0, 0]
-                # new_A_2 = [(0, 0) for i in range(m)]
-                # two_states = False
+                # if LFTi > d_i:  # Check if this job doesn't have a deadline miss
+                #     # If it misses the deadline, then the job set is NOT schedulable
+                #     # So no need to check the rest of the paths, just return
+                #     logger.info("Not schedulable!")
+                #     return G, BR, WR
 
                 if parent_state != None:
                     if Ji in MWS:
@@ -374,23 +336,6 @@ def ScheduleGraphConstructionAlgorithm(
                     if (Ji in MWS) and (len(mWS) == 0) and is_eligible(R_P):
                         EST_R, LST_R, t_h = get_ST(R_P)
                         create_new_state(EST_R, LST_R, (EST_R, LST_R))
-                        # EFT = EST + C_min
-                        # LFT = LST + C_max
-                        # new_PP2 = (EST, LST)
-
-                        # PA = [max(ESTi, A[idx][0]) for idx in range(1, m)]
-                        # CA = [max(ESTi, A[idx][1]) for idx in range(1, m)]
-
-                        # PA.append(EFT)
-                        # CA.append(LFT)
-
-                        # PA.sort()
-                        # CA.sort()
-
-                        # for i in range(m):
-                        #     new_A_2[i] = (PA[i], CA[i])
-
-                        # two_states = True
 
                     # if Ji in R_P but Ji *not* in MWS AND GWS EMPTY
                     if (Ji not in MWS) and (len(mWS) == 0):
@@ -401,33 +346,13 @@ def ScheduleGraphConstructionAlgorithm(
                     # new_PP = PP
                     create_new_state(ESTi, LSTi, (ESTi, LSTi))
 
-                # new_PP = tuple(new_PP)
-
-                # if two_states is False:
-                #     new_state = StateROS(new_A, new_X, new_FTI, new_PP)
-                #     new_state_id = get_rand_node_id()
-                #     G.add_node(new_state_id, state=new_state)
-                #     G.add_edge(P[-1], new_state_id, job=Ji)
-                # else:
-                #     new_state = StateROS(new_A, new_X, new_FTI, new_PP)
-                #     new_state_id = get_rand_node_id()
-                #     G.add_node(new_state_id, state=new_state)
-                #     G.add_edge(P[-1], new_state_id, job=Ji)
-
-                #     new_state = StateROS(new_A_2, new_X, new_FTI, new_PP2)
-                #     new_state_id = get_rand_node_id()
-                #     G.add_node(new_state_id, state=new_state)
-                #     G.add_edge(P[-1], new_state_id, job=Ji)
-
-                # BR[Ji] = min(EFTi - r_min, BR[Ji])
-                # WR[Ji] = max(LFTi - r_min, WR[Ji])
-                # logger.info(f"job {Ji} with ESTi = {ESTi} and LSTi = {LSTi}")
-
         # Next iteration
         P = shortestPathFromSourceToLeaf(G)
         # breakpoint()
         if len(G.nodes) % 10 == 0:
             logger.info(f"The graph has {len(G.nodes)} nodes")
+        # if len(P) == 8:
+        #     return G, BR, WR
 
     # logger.info(f"BR: {BR}")
     # logger.info(f"WR: {WR}")

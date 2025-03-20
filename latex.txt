@@ -1,0 +1,203 @@
+ROS applications consist of \textit{nodes}. Nodes contain local data, auxiliary functions and \textit{callbacks}. From a programmer's point of view, the nodes are classes and callbacks are among the class's member functions. The user writes nodes and callbacks that interact with each other, so they represent the user-level in the ROS stack, as can be seen on the right side of \cref{fig:rosarchi}.
+
+At the heart of the ROS framework lies the \emph{Publish/Subscribe} architecture. Nodes send data by \emph{publishing} messages to \emph{topics}, and receive data by \emph{subscribing} to topics. The ROS user is concerned only with this high-level image in which the \emph{nodes} do the publishing and subscribing, and most ROS development is done at this level. ROS visualization tools, represent the ROS graph like in \cref{fig:rqtGraph}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{figures/03_background/publishSubscribeNodes.pdf}
+    \caption{Example of a ROS architecture as seen from \texttt{rqtgraph}.}
+    \label{fig:rqtGraph}
+\end{figure}
+
+
+\chapter{Background}\label{chapter:background}
+In this section we provide the necessary background knowledge required to have an good understanding of the work presented in the report. We star with \cref{sec:realTime} in which we provide a primer on real-time systems based on the work of Butazzo~\cite{buttazzo2011hard} (namely terminology and general assumptions). In \cref{sec:backgroundSAG} we present the main ideas of the standard schedule-abstraction graph based on the paper of Nasri et al.~\cite{nasri2017}. Lastly, we decribe ROS in detail, its architecture in \cref{sec:rosarchi}, and our main interest, the ROS Executor, in \cref{section: rosexecutor}. \cref{sec:realTime,sec:backgroundSAG} can be skipped, but \cref{sec:rosarchi,section: rosexecutor} have definitions that are used later on in this report.
+
+\section{Real-time systems} \label{sec:realTime}
+The contents of this section are nearly entirely based on Butazzo's \emph{Hard real-time computing systems} \cite{buttazzo2011hard} and are adapted to the needs of this report, which means that simplifications and omissions are made intentionally. For an in-depth look at real-time systems please refer to \cite{buttazzo2011hard}.
+
+A real-time system is a system that is subjected to real-time constraints. In other words, the behavior of the system doesn't depend \emph{only on the results} of functions, but also on the \emph{time} at which the results are produced. A reaction that occurs too late could have dangerous consequences. Robotics is a field where real-time behavior is necessary for a variety of uses cases, so ROS is desired to exhibit such functionality.
+
+The most important software entity in real-time systems is the \emph{task}, which is a computation executed by the CPU in a sequential manner. The order in which tasks are executed on the CPU is decided by a set of rules, called the \emph{scheduling algorithm}. The action of the scheduling algorithm that places a task on a CPU core is called \emph{dispatch}. A task that's waiting to be dispatched is called \emph{ready} task, while all ready tasks that are waiting to be dispatched are stored in the \emph{ready queue}. A task that is currently being executed by the CPU is called \emph{running} task. An order in which tasks are dispatched to the CPU such that they execute to completion is called \emph{schedule}.
+
+The act of interrupting a running task is called \emph{preemption}. A scheduling algorithm that allows preemption is called \emph{preemptive}. Preemptive systems are widely used -- all operating systems that we use every day use preemptive schedulers. The schedule-abstraction graph was initially developed for \emph{non-preemptive} schedulers \cite{nasri2017,nasri2018,nasri2019,nelissen2022}, but recently was extended to preemptive algorithms as well \cite{pourya2024}. As we explain in \cref{section: rosexecutor}, the ROS Executor is a non-preemptive scheduler.
+
+Another important property of a scheduling algorithm is whether it is \emph{work-conserving}. A work-conserving algorithm does its best effort to be \emph{always} busy. This means that whenever a task is ready and a core is idle, the scheduler dispatches the task to the core. Conversely, a \emph{non-work-conserving} scheduler could "hold back" tasks and wait for a criterion to be met. The ROS Executor is a work-conserving scheduler as we will see in \cref{section: rosexecutor}, hence we draw the reader's attention to this property.
+
+A common time requirement for tasks is the \emph{deadline}. A task set is \emph{schedulable} if there exists a schedule where no task misses its deadline. Deadlines may be \emph{relative} (from when tasks become available) or \emph{absolute} (from time zero). The consequences of missing a deadline denote the type of system we are dealing with. Due to the nature of robotic systems, we are concerned with \emph{hard} real-time systems, i.e., a deadline miss may have catastrophic results.
+
+A task $\tau$ is characterized by the parameters presented in \cref{tab:charTasks}. Usually, $r,C,d$ of a task $\tau$ are known in some capacity \emph{a priori}, while $st,ft,R$ become known at runtime. The parameters are also visualized in \cref{fig:taskParams}. Notice that the release time $r$ is represented by an upwards-pointing arrow, while the deadline $d$ is represented by a downwards-pointing arrow. This can be read as: the task is "sent away" (dispatched) to be executed by the CPU at time $r$, and it must "return" (finish) by time $d$.
+\begin{table}[ht!]
+    \centering
+    \begin{tabular}{c|c|p{7cm}}
+        Parameter & Symbol & Definition\\
+        \hline
+        Priority & $p$ & Integer that represents $\tau's$ importance\\
+        Arrival/Release time & $r$ & Time at which $\tau$ becomes ready for execution\\
+        Release jitter & $\sigma$ &  Maximum deviation from $r$ at which the task is actually released\\
+        Execution/Computation time & $C$ & Time that the CPU must execute $\tau$ without interruption\\
+        Absolute deadline & $d$ & Time before which $\tau$ should be completed with respect to time zero\\
+        Relative deadline & $D$ & Time before which $\tau$ should be completed with respect to $r$\\
+        Start time & $st$ & Time at which $\tau$ is dispatched to the CPU\\
+        Finish time & $ft$ & Time at which the CPU finishes executing $\tau$\\
+        Response time & $R$ & Difference between finish time and release time: $f-r$
+    \end{tabular}
+    \caption{Characteristics of a task}
+    \label{tab:charTasks}
+\end{table}
+
+Another important characteristic of a task is the pattern of its release. There are 2 categories of tasks: \emph{periodic} and \emph{aperiodic}. Periodic tasks have an additional parameter, the period $T$. Periodic tasks release an \emph{instance}, or frequently called \emph{job} and notated $j$, every time the period expires. The release patterns of aperiodic tasks can be many, but we focus on \emph{event-triggered} tasks, i.e., tasks that release a job when a specific event happens. 
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/03_background/taskParams.pdf}
+    \caption[Time parameters of a periodic task.]{Time parameters of a task. Figure inspired by Figure 2.4 in \cite{buttazzo2011hard}.}
+    \label{fig:taskParams}
+\end{figure}
+Scheduling algorithms can work with scheduling tasks, case in which they are called \emph{task-level} schedulers, or directly with their jobs, case in which we have \emph{job-level} schedulers. In this work we treat the ROS Executor as a job-level scheduler. \cref{fig:taskParams} shows a snapshot of a periodic task's timeline. We can see two jobs of task $\tau$ ($j$ and $j'$) with their respective release times $r$ and $r'$. Notice that the release jitter $\sigma$ makes the release time of $j$ \emph{uncertain}; $j$ could be released at any time in interval $[r,r+\sigma]$.
+
+The deadline's relation to a periodic task's period also greatly impacts the complexity of the real-time system we consider. Deadlines that are lower or equal to the period are called \emph{constrained} deadlines. Deadlines that can have any value, even higher than the period, are called \emph{arbitrary} deadlines. We focus on constrained deadlines in this work.
+
+Often times tasks must be executed in a specific order due to data dependencies, i.e., a task needs data produced by some other task(s) in order to output a correct value. This structure is very evident in ROS's design as we will see in \cref{sec:rosarchi}. The relations between such tasks are represented by a \emph{directed acyclic graph} (DAG), in which tasks are the vertices of the graph and the dependencies are represented by the graph's edges. An edge from task $\tau_1$ to $\tau_2$ denotes a \emph{precedence relation} between $\tau_1$ and $\tau_2$. We say that $\tau_1$ is the \emph{predecessor} of $\tau_2$, and that $\tau_2$ is the \emph{successor} of $\tau_1$. Thus, $\tau_2$ has a \emph{precedence constraint}. A task can have many predecessors and many successors, but we focus on tasks with only \emph{one} predecessor and allow multiple successors, as we describe in \cref{sec:systemModel}. Due to its precedence constraints, a task $\tau$ cannot start execution before its predecessors finish.
+
+\cref{fig:predConstDAG} shows 2 examples of DAGs that represent precedence constraints. We allow DAGs that look like the one on the left, but we do not allow DAGs that look like the one on the right, i.e., we don't allow more than one ingoing edge to a vertex. We can read the graph on the left: $\tau_4$ depends on $\tau_2$ which in turn depends on $\tau_1$, and $\tau_3$ also depends on $\tau_3$.
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/03_background/predDAGeg.pdf}
+    \caption[Example of precedence constraints DAGs.]{Example of precedence constraints DAGs.}
+    \label{fig:predConstDAG}
+\end{figure}
+
+A collection of tasks, along with their parameters, release patterns, and precedence constraints, is known as the \emph{workload model} of the system under analysis. The workload model formally \emph{models} the timing behavior of the system. Under the rules of a workload model we analyze sets of tasks, or \emph{task sets}. By examining the release patterns of the tasks in a task set, one can generate a corresponding \emph{job set}. Given a scheduling algorithm and either a task set or its derived job set, the problem of determining whether the task set is schedulable is known as \emph{the scheduling problem}. The analytical solution to a scheduling problem is called \emph{response time analysis} (RTA), because by analyzing the response time and deciding whether it is greater than the deadline i.e., $R>d$, one can decide whether a task is schedulable or not. As it can be seen in \cref{fig:rta}, engineers and researchers develop and use response time analyses to obtain lower and upper bounds on the response time of the tasks of a system, which allows them to verify their timing constraints.
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=\linewidth]{figures/03_background/responseTimeAnalysis.pdf}
+    \caption{The scheduling problem solved by response-time analysis.}
+    \label{fig:rta}
+\end{figure}
+
+Traditionally, the technique for response time analyses for a non-preemptive scheduling algorithm is the \emph{busy-window} method. The technique would calculate the \emph{longest possible} interference that could occur before a task would be dispatched, i.e., the maximum length of the \emph{window} of time in which other tasks would keep the CPU \emph{busy} before $\tau$ could be dispatched to the CPU. This idea is visualized in \cref{fig:busyWindow}. By considering the \emph{longest possible} busy-window, or the \emph{worst-case} scenario for the task set, response time analyses \emph{overestimate} the \emph{actually possible} worst-case response time ($WCRT$). This is because the considered worst-case scenario might not be reachable due to the rules of the scheduling algorithm. The response time analyses that use the busy-window approach effectively say: "While the worst-case might not be possible, \emph{if it would be} then the response time of any other case cannot be higher than the worst-case response time".
+
+Prompted by the pessimism of traditional busy-window approaches, researchers developed new techniques, like \emph{reachability-based} analyses like the \emph{schedule-abstraction graph}.
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/03_background/busyWindow.pdf}
+    \caption{Busy-window overview for response time analysis.}
+    \label{fig:busyWindow}
+\end{figure}
+
+\section{Schedule-Abstraction Graph} \label{sec:backgroundSAG}
+This section is almost entirely based on Nasri et al.~\cite{nasri2017,nasri2018,nasri2019} and focuses on the schedule-abstraction graph introduced in \cite{nasri2019}. As in the previous section, we provide only a brief overview; for a detailed description, please refer to \cite{nasri2019}.
+
+The SAG response time analysis considers the scheduling problem of a \emph{global work-conserving non-preemptive} scheduling algorithm that schedules a \emph{job set} $\mathcal{J}$ released in a observation window whose length can be computed \emph{a priori}. Since all jobs have a fixed priority and the scheduling operates at the job-level, we call it a \emph{job-level fixed-priority} (JLFP) scheduler. The scheduling algorithm has at its disposable $m$ \emph{identical} cores that it can use to execute $m$ jobs in parallel. Time is assumed to be discreet. Each job $j$ is characterized by a tuple: $\bigl([r^{min}(j), r^{max}(j)]$, $[C^{min}(j),C^{max}(j)], d(j), p(j),pred(j)\bigl)$. A job $j$ features release time variation, i.e., the release of a job $j$ can happen at any time instance in interval $[r^{min}(j), r^{max}(j)]$. Furthermore, computation time can vary; a job $j$ may execute for any duration within $[C^{min}(j), C^{max}(j)]$. The deadline and priority are defined as in \cref{sec:realTime}, and $pred(j)$ denotes the set of a job’s predecessors.
+
+The response time analysis explores all possible schedules using a schedule-abstraction graph \cite{nasri2019}, where each path corresponds to a series of job-dispatch decisions by the scheduling algorithm. We briefly outline the graph's definition, the modeling of job dispatch, and the derivation of response time, focusing on concepts rather than equations.
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/03_background/sagExample.pdf}
+    \caption[Example of a schedule-abstraction graph]{Example of a schedule-abstraction graph, illustrating paths with job-dispatch decisions.}
+    \label{fig:sagEx}
+\end{figure}
+
+The schedule-abstraction graph is defined as a $\mathit{DAG}$ $G=(V,E)$, where $V$ is a set of system \emph{states} and $E$ is a set of labeled edges. An edge $e\in E$ is defined as $e=(u,v,j)$, where $u$ is the source state, $v$ is the destination state, and the label $j$ is the \emph{job} that was dispatched by the scheduling algorithm. The dispatch of $j$ from state $u$ evolves the system to state $v$. We say that $j$ is dispatched \emph{next} after state $u$ when there is an outgoing edge from state $u$. A path $P$ from the initial state $v_1$ to a state $v_p$ represents a \emph{potential} sequence of job-dispatch events made by the scheduling algorithm that lead to state $v_p$. State $v_1$ represents the system at time zero before any dispatch. $\mathcal{J}^P$ represents the jobs dispatched on path $P$, i.e., the labels of all edges of path $P$. \cref{fig:sagEx} shows an example of a small SAG. As we can see, for a job set $\mathcal{J}=\{j_1,j_2,j_3,j_4\}$ the JLFP scheduler has only 3 orders in which it \emph{could} dispatch the jobs.
+
+Due to release jitter and execution time variation, exponentially many execution scenarios arise, making it difficult to know the exact \emph{finish time} of each job a priori. Consequently, the SAG computes an interval $[EFT(j), LFT(j)]$ in which a job $j$ may complete after a series of dispatch decisions. Here, $EFT(j)$ denotes the \emph{earliest finish time} of job $j$, while $LFT(j)$ represents the \emph{latest finish time}. By exploring all potential dispatch sequences, the SAG identifies every possible finish time, recording the \emph{minimum} and \emph{maximum} over all paths to determine the best-case response time ($BCRT$) and worst-case response time ($WCRT$). The SAG is considered fully computed when every path from the initial state to the leaf states includes all jobs from $\mathcal{J}$.
+
+Consider again job $j_2$ in the SAG from \cref{fig:sagEx}, but now we know all the finish time intervals of $j_2$ over all paths of the SAG, like in \cref{fig:sagExFT}. By computing the minimum over each $EFT(j_2)$ (the left-side of the interval) we obtain the $BCRT$; in this case it is equal to $2=\min\{2,4,6\}$. By computing the maximum over each $LFT(j_2)$ (the right-side of the interval) we obtain the $WCRT$; in this case it is equal to $12=\max\{9,7,12\}$.
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/03_background/sagExampleFT.pdf}
+    \caption{Example of finish time intervals computed for a job over each path of a SAG.}
+    \label{fig:sagExFT}
+\end{figure}
+
+A major challenge is that uncertainty in job finish times introduces uncertainty in core availability, which in turn affects the finish time intervals of subsequently scheduled jobs. Nasri et al.~\cite{nasri2019} address this challenge by exploiting the symmetry of cores. The state of the system after a potential sequence of dispatches is indicated by when one, two, three, ..., $m$ cores will be \emph{possibly} and \emph{certainly} available. Thus, each state $v$ contains the \emph{core availability intervals}, notated as $A(v)=\{A_1(v),A_2(v),...,A_{m}(v)\}$. An interval $A_x(v)\in A(v)$ represents the availability interval of $x$ cores in state $v$. $A_x(v)=[A_x^{min}(v),A_x^{max}](v)$ means that $x$ cores are potentially available starting at time $A_x^{min}$ and certainly available by $A_x^{max}$ in state $v$.
+
+In a nutshell, starting from the initial state $v_1$, the SAG \emph{expands} each leaf state $v_p$ by dispatching all jobs that are deemed eligible from the state $v_p$. The core availability intervals $A(v_p)$ are used to reason about what jobs are eligible for dispatch. When a job $j$ is dispatched from $v_p$ to a new state $v_p'$, the SAG computes the finish times interval of $j$ and updates the availability intervals accordingly for $v_p'$. To reduce the rapid expansion of the graph, the SAG technique also \emph{merges} job-dispatch sequences that lead to the same state.
+\begin{table}[ht!]
+    \centering
+    \begin{tabular}{c|cc|cc|c|c}
+        Job & \multicolumn{2}{c|}{Release time} & \multicolumn{2}{c|}{Execution time} & Priority & Deadline \\
+         & $r^{min}$ & $r^{max}$ & $C^{min}$ & $C^{max}$ &  & \\
+        \hline
+        $j_1$ & 0 & 0 & 1 & 3 & highest & 20 \\
+        $j_2$ & 0 & 0 & 6 & 7 & medium & 20 \\
+        $j_3$ & 0 & 15 & 4 & 13 & low & 30 \\
+        $j_4$ & 11 & 11 & 1 & 2 & high & 20 \\
+    \end{tabular}
+    \caption{Job set $\mathcal{J}$ for an SAG}
+    \label{tab:jobSetEx}
+\end{table}
+
+Consider the job set shown in \cref{tab:jobSetEx}. Notice that $j_3$ is a low-priority job with significant release time variation compared to the other jobs. Now, see \cref{fig:sagExA}, which displays the created SAG for the job set from \cref{tab:jobSetEx} under a JLFP scheduler with $m=1$ core. Initially, the core is idle, so $A_1(v_1)=[0,0]$. A JLFP scheduler considers for dispatch \emph{all jobs that could be ready at the current time instant}. At $t=0$ we have $j_1,j_2$ that are \emph{certainly} released and $j_3$ that is \emph{potentially} released. Since $j_1$ is the highest priority job ready at time $t=0$, it is dispatched and executes for $[1,3]$ time units. Consequently, the next times at which the core may become available are determined by the completion of $j_1$, i.e., between $1$ and $3$, so $A_1(v_2)=[1,3]$. The same reasoning applies to $j_2$. Although $j_2$ is certainly available from $t=0$, the core becomes available only within the interval $[1,3]$. When the core is available in state $v_2$, the scheduler selects $j_2$, the highest-priority ready job, and dispatches it as soon as possible due to its work-conserving nature. After $j_2$ is dispatched, we can predict the subsequent times at which the core becomes available based on $j_2$'s execution times. Thus, if the core is free at the earliest possible time, i.e., $A_1^{min}(v_2)=1$, and $j_2$ executes for its minimum duration, i.e., $C^{min}(j_2)=6$, then the next \emph{earliest} time the core becomes available is $A_1^{min}(v_3)=A_1^{min}(v_2) + C^{min}(j_2)=1+6=7.$
+Similarly, the next \emph{latest} time is $A_1^{max}(v_3)=A_1^{max}(v_2) + C^{max}(j_2)=3+7=10.$
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/03_background/sagExampleA.pdf}
+    \caption{Example of updates of the core availability intervals in the SAG.}
+    \label{fig:sagExA}
+\end{figure}
+
+The interesting situation occurs in state $v_3$. Due to its release jitter, $j_3$ can be released at any time in $[0,15]$. Since we know that in state $v_3$ the core becomes available at some time in $[7,10]$, it is \emph{possible} that $j_3$ is \emph{not} released by the time our core \emph{certainly} becomes available. Moreover, $j_4$ is certainly released at time $t=11$, so $j_4$ could be released before $j_3$ \emph{or} $j_3$ could be released before $j_4$. These two possibilities in dispatch order are captured by the SAG with two separate paths from $v_3$: one where $j_3$ is dispatched first, and one where $j_4$ is dispatched first.
+
+If $j_3$ is dispatched first, then the \emph{earliest} time it could start execution is $t=7$, provided that the core becomes available at $7$ and $j_3$ is released in $[0,7]$. The \emph{latest} time it could start execution is $t=10$, if the core becomes available at $10$ and $j_3$ is released in $[0,10]$. Crucially, $j_3$ \emph{cannot} start later than $11$, because $j_4$ is released at $11$ and $j_4$ is \emph{higher-priority} than $j_3$. Thus, if $j_3$ is released in $[11,14]$ (i.e., after $j_4$ is released at $11$), then the scheduler would choose $j_4$ for dispatch rather than $j_3$. By determining the earliest and latest \emph{start times} of $j_3$, we can infer that the core will be available in $v_4$ whenever it finishes $j_3$ in the interval $[7+C^{min}(j_3),\, 10+C^{max}(j_3)] = [7+4,\,10+13] = [11,23].$
+
+If $j_4$ is dispatched first, then it must be released at $t=11$ and $j_3$ must be released in $[11,15]$. The core becomes available starting from $t=10$, but since there are no jobs to execute, the core remains idle until the next job becomes ready—this next job being $j_4$. Thus, we can infer that after dispatching $j_4$, the core will become available after it finishes $j_4$, starting from $11$, i.e., $A_1 = [11+C^{min}(j_4),\, 11+C^{max}(j_4)] = [12,13].$
+
+By computing the remaining core availability intervals, we determine for each job all its potential finish times. Specifically, $j_4$ finishes on the upper path sometime in $[12,25]$ and on the lower path in $[12,13]$. Crucially, the deadline of $j_4$ is $20$. Thus, since there is a path on which $j_4$ does not meet its deadline, $j_4$ is prone to deadline misses, and hence the job set is \emph{not} schedulable.
+
+The SAG employs much more complex logic than this example illustrates. Nonetheless, this example highlights the key idea behind the SAG: it uses the rules of the scheduling algorithm and the availability of system cores to reason about \emph{which} jobs can be dispatched from a given state, and \emph{when} jobs can finish. Unlike traditional JLFP schedulers, the ROS scheduler does not examine \emph{all ready} jobs in a given state; instead, it considers a specific subset called the \emph{WaitSet}. This change dramatically impacts the behavior of ROS, so to fully grasp its effects we now go on to explaining the inner-workings of ROS.
+
+\section{ROS architecture} \label{sec:rosarchi}
+ROS is a middleware which sits on top of the operating system (OS) and provides a set of libraries and tools for robotic application development. In particular, the ROS client library (\emph{rcl}) has a common \verb|C| API, on top of which high-level-language-specific client libraries are built (like \emph{rclcpp} and \emph{rclpy} for \verb|C++| and Python respectively), and the middleware library (\emph{rmw}) provides publisher-subscriber interfaces for a Data Distribution Service (DDS) implementation and a custom intra-process communication API. The user interacts with the language-specific APIs, and she decides which one to use. If ROS is used on a microcontroller like the micro-ROS version~\cite{Belsare_et_al_2023_Micro-ROS}, then the user will interact directly with the \verb|C| client library, \emph{rclc}. However, most users of ROS install it on Ubuntu Linux and prefer the \verb|C++| version for production environments. Therefore, we focus on the \verb|C++| ROS API, rclcpp. The ROS stack is presented on the left side of Figure \ref{fig:rosarchi}.
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=\linewidth]{figures/03_background/rosStructure.pdf}
+    \caption[]{ROS architecture and application model}
+    \label{fig:rosarchi}
+\end{figure}
+We stress that the DDS implementation is a $3^{rd}$ party product and does \emph{not} originate from ROS. ROS installs with FastRTPS~\cite{fastRTPS} as the default DDS for ROS2 Jazzy Jalisco, but users can choose an alternative.
+
+
+Callbacks are triggered when an event happens. They are categorized into 5 types, based on the \emph{type} of event that triggers them: timer callbacks triggered when the timer period is up, subscription callbacks triggered when a message arrives, service and client callbacks triggered by a service request and response to a service respectively, and waitable which is a custom callback type that can be defined by the user. We say that a triggered callback is a callback that has messages to process, so it is \textit{ready} to be executed.
+
+\begin{definition} \label{def: readyCallback} A ready callback is a callback that is triggered and not yet executed. \end{definition}
+
+The callback types inherently follow a priority order, with timer callbacks having the highest, waitable the lowest. For callbacks of the same type, their priority is determined by the order of declaration in the node. As several RTAs \cite{casini_et_al, blassExploitStarv2021, sobhani, jiang, teper2024mte} observe, this behavior yields an \emph{implicit} fixed priority defined by the tuple $(type, registration)$. Although ROS does not explicitly implement callback priorities, the processing order effectively creates one. Importantly, while callbacks are actual executable entities, nodes are just containers of callbacks and serve as an abstraction to allocate callbacks to the ROS Executor. Thus, when a node is allocated to an Executor, all its callbacks are assigned to be managed by that Executor. We detail the ROS Executor in \cref{section: rosexecutor}.
+
+A set of callbacks with data dependencies forms a \textit{processing chain}, or simply called a \textit{chain}. Each callback can be associated with one or more chains, and chains can be formed by callbacks from different nodes.
+
+\section{ROS Executor} \label{section: rosexecutor}
+ROS features its own algorithm of scheduling callbacks, the ROS executor. This is a common header that can be implemented in multiple ways. The vanilla ROS offers 3 implementations: Static Single-Threaded Executor, Single-Threaded Executor (STE), and Multi-Threaded Executor (MTE).
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/03_background/mte_flow.png}
+    \caption{Workflow of an executor-thread of an MTE, diagram inspired by \cite{liuRtex,teper2024mte}.}
+    \label{fig:mteWorkflow}
+\end{figure}
+
+An \textit{Executor} is the ROS abstraction of OS-level scheduling. It handles callbacks, their scheduling, and their execution. The thread(s) of the ROS Executor take messages from the abstract DDS layer and execute the callbacks triggered by these messages. Based on its type, the Executor may have one or more threads. We refer to a thread of the Executor as an \textit{executor-thread}. Each Executor maintains a data structure, in-code called \verb|wait_set|, to cache the callbacks that have available messages, i.e., the ready callbacks (\cref{def: readyCallback}). Confusingly, in literature this data structure was referred to as \textit{ReadySet} \cite{casini_et_al, tang_et_al_2020, sobhani} or \textit{wait set} \cite{jiang, liuRtex, teper2024mte}. We prefer the approach of the latter studies, so we keep to the name given by the programmers of ROS, and call it \textit{WaitSet}.
+
+The STE and MTE work essentially in the same way: if the WaitSet is empty, then the Executor fills the WaitSet with callbacks that have messages to process, it processes the callbacks from the WaitSet \textit{non-preemptively} one-by-one in order of priority until the WaitSet is empty, and repeat. The difference is that the MTE has multiple executor-threads that can execute callback instances concurrently. The crucial point is that the executor-threads of the MTE share \textit{the same} WaitSet. Thus, each executor-thread has to lock the WaitSet to ensure data consistency. Moreover, each thread can bring and take callbacks to and from the WaitSet. The \textit{simplified} workflow of an executor-thread can be seen in \cref{fig:mteWorkflow}. Our work's focus is on the more complex MTE, but the reader should keep in mind that the STE is just a special case of the MTE and our analysis works on both. 
+
+The WaitSet and the update of the WaitSet are the aspects that make the ROS Executor special among schedulers. Crucially, the WaitSet is updated \textit{only after} it becomes empty, which is one of the reasons it does not adhere to traditional schedulers analyzed in the literature. Traditional non-preemptive schedulers can look at \textit{all} ready jobs and consider them for dispatch. On the other hand, the ROS Executor looks only at the ready jobs in the WaitSet, while there could be ready jobs outside the WaitSet. The ROS Executor just doesn't see \textit{all} ready jobs as the schedulers tradionally considered in literature.
+
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/03_background/sequence.png}
+    \caption{Sequence of events that lead to an update of the WaitSet.}
+    \label{fig:ppTimeline}
+\end{figure}
+
+\cref{fig:ppTimeline} shows the sequence of events that lead to an update of the WaitSet. Casini et al.\cite{casini_et_al} define an update of the WaitSet as \textit{polling point}. In \cite{blassExploitStarv2021, tang_et_al_2020, jiang} a polling point is more precisely defined as \textit{the time instance} at which the WaitSet is updated. All \cite{casini_et_al, blassExploitStarv2021, tang_et_al_2020, jiang} refer to the blue box in \cref{fig:ppTimeline}. Sobhani et al.\cite{sobhani} adjust the definition of a polling point to the moment when at least one executor thread becomes idle (the purple box). We adopt the same concept as in \cite{casini_et_al} and define a polling point as follows:
+
+\begin{definition} \label{pp-def}
+    A polling point represents the act of bringing callbacks into the WaitSet by an executor-thread of the ROS Executor. The time when a polling point happens is the time instance at which ready callbacks are brought into the WaitSet.
+\end{definition}
+
+An important concept only relevant for the MTE is the \textit{callback group}. Callbacks can be assigned to \textit{groups} to control the concurrency of their execution. There are two types of callback groups.  The \textit{reentrant} (R) callback group allows the MTE to execute callbacks from that group concurrently with no restriction. The \textit{mutually-exclusive} (ME) callback group guarantees that \textit{at most one} callback from the group can be executed at each point in time. Thus, if an executor-thread is currently executing a callback from an ME group, then other executor-threads cannot execute a callback from the same group until the currently executing one is finished.
+
+Although ROS nodes are configured by default with mutually-exclusive callback groups, this default setting introduces significant complexity into the MTE’s scheduling. In particular, the combination of mutually-exclusive groups with polling points can lead to starvation \cite{teper2024mte}. In many practical, performance-critical systems, however, developers opt to use reentrant callback groups, which allow for concurrent execution and inherently avoid starvation. For these reasons we focus our analysis on systems that employ only reentrant callback groups.

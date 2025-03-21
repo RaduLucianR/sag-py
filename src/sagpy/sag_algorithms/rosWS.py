@@ -129,6 +129,10 @@ def ScheduleGraphConstructionAlgorithm(
                 return FTI[Jx][0]  # EFT_x(v_p)
             else:
                 return BR[Jx]
+            
+        def R_min(Ja):
+            ra_min = JDICT[Ja]["r_min"]
+            return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
 
         def LFT_star(Jx):
             if Jx in X:
@@ -136,9 +140,7 @@ def ScheduleGraphConstructionAlgorithm(
             else:
                 return WR[Jx]
 
-        def R_min(Ja):
-            ra_min = JDICT[Ja]["r_min"]
-            return max(ra_min, max([EFT_star(Jy) for Jy in PRED[Ja]], default=0))
+        
 
         def R_max(Ja):
             ra_max = JDICT[Ja]["r_max"]
@@ -209,6 +211,9 @@ def ScheduleGraphConstructionAlgorithm(
                 if is_eligible(R_P) is True:
                     dispatch = True
                     which_WS = R_P
+            
+            if last_dispatched_job == "J3_16":
+                    breakpoint()
 
             if dispatch is True:
                 # breakpoint()
@@ -316,9 +321,8 @@ def ScheduleGraphConstructionAlgorithm(
                 LFTi = LSTi + C_max
 
                 # if Ji == "J5_25":
-                if LFTi > 153119 and Ji == "J5_25":
-                    print([G[u][v]["job"] for u, v in zip(P[:-1], P[1:])])
-                    breakpoint()
+                # if last_dispatched_job == "J3_16":
+                #     breakpoint()
 
                 # if LFTi == 6:
                 #     breakpoint()

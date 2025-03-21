@@ -8,134 +8,6 @@ from functools import lru_cache
 import time
 import csv
 
-################# GLOBALS ###############
-job_info = {}
-
-################ Calculate finish orderings ###################
-# @lru_cache(maxsize=None)
-def dp(current_time, waiting, running, m):
-    """
-    Dynamic programming function that propagates finish intervals using the analytical bounds
-    of the finish times for each task and the known dispatch order of the tasks.
-    
-    waiting: tuple of task ids (in dispatch order) not yet dispatched.
-    running: tuple of tuples (task_id, finish_time, dispatch) for currently running tasks.
-    """
-    results = {}  # Mapping finish_ordering -> { task_id: (min_finish, max_finish) }
-    
-    # If there are waiting tasks and free cores, dispatch the next task.
-    if waiting and len(running) < m:
-        task_id = waiting[0]
-        ft_min, ft_max, exec_min, exec_max, task_dispatch = job_info[task_id]
-
-        if current_time < ft_min - exec_min:
-            return dp(ft_min - exec_min, waiting, running, m)
-        
-        new_waiting = waiting[1:]
-        
-        # Calculate the potential finish time interval using current_time and exec bounds.
-        start_possible = current_time + exec_min
-        end_possible   = current_time + exec_max
-        
-        # Intersect with the analytical finish time bounds.
-        effective_lower = max(start_possible, ft_min)
-        effective_upper = min(end_possible, ft_max)
-        
-        if effective_lower > effective_upper:
-            # No valid finish time exists.
-            return {}
-        
-        # Instead of iterating over every integer in the interval,
-        # we branch on the critical points: the lower and upper bounds.
-        new_results = {}
-        for finish_time in (effective_lower, effective_upper):
-            new_running = list(running) + [(task_id, finish_time, task_dispatch)]
-            new_running.sort(key=lambda t: (t[1], t[2], t[0]))
-            branch_results = dp(current_time, new_waiting, tuple(new_running), m)
-            # Merge branch_results into new_results.
-            for order, mapping in branch_results.items():
-                if order in new_results:
-                    for tid, (curr_min, curr_max) in mapping.items():
-                        if tid in new_results[order]:
-                            prev_min, prev_max = new_results[order][tid]
-                            new_results[order][tid] = (min(prev_min, curr_min), max(prev_max, curr_max))
-                        else:
-                            new_results[order][tid] = (curr_min, curr_max)
-                else:
-                    new_results[order] = mapping.copy()
-        return new_results
-
-    # If no new task can be dispatched, process the next finish event.
-    if running:
-        next_time = min(task[1] for task in running)
-        finishing_tasks = [task for task in running if task[1] == next_time]
-        finishing_tasks.sort(key=lambda t: t[2])
-        finished_ids = tuple(task[0] for task in finishing_tasks)
-        new_running = tuple(task for task in running if task[1] != next_time)
-        branch_results = dp(next_time, waiting, new_running, m)
-        for order, mapping in branch_results.items():
-            new_order = finished_ids + order
-            new_mapping = {tid: (next_time, next_time) for tid in finished_ids}
-            for tid, (prev_min, prev_max) in mapping.items():
-                new_mapping[tid] = (prev_min, prev_max)
-            if new_order in results:
-                for tid, (curr_min, curr_max) in new_mapping.items():
-                    if tid in results[new_order]:
-                        old_min, old_max = results[new_order][tid]
-                        results[new_order][tid] = (min(old_min, curr_min), max(old_max, curr_max))
-                    else:
-                        results[new_order][tid] = (curr_min, curr_max)
-            else:
-                results[new_order] = new_mapping
-        return results
-
-    # Base case: no waiting tasks and no running tasks.
-    return {(): {}}
-
-def compute_certain_successors(m, dispatch_order, finish_order, finish_times, SP):
-    # breakpoint()
-    n = len(dispatch_order)
-    # Underloaded system: if there are fewer tasks than cores, some cores are idle from the start.
-    if n < m:
-        return set()
-    
-    # The idle event is triggered at the (n - m + 1)-th finish event (using 1-based indexing)
-    idle_index = n - m + 1
-
-    # Tasks that are certainly finished before the idle event:
-    finished_definitely = finish_order[:idle_index - 1]
-    
-    # Identify the idle finishing group.
-    # Start with the base task (the one at the idle event position).
-    base_task = finish_order[idle_index - 1]
-    base_interval = finish_times[base_task]
-    idle_group = [base_task]
-    
-    # For tasks after the idle event, include them if their finish interval overlaps
-    # with the base task's interval, meaning they could finish concurrently.
-    for task in finish_order[idle_index:]:
-        current_interval = finish_times[task]
-        if max(base_interval[0], current_interval[0]) <= min(base_interval[1], current_interval[1]):
-            idle_group.append(task)
-        else:
-            break
-
-    # Now, gather successors:
-    # 1. All tasks that finished before the idle event certainly released their successors.
-    succ_set = frozenset()
-    for task in finished_definitely:
-        if task in SP:
-            succ_set = succ_set.union(SP[task]["succ"])
-    
-    # 2. From the idle finishing group, we are only certain that the highest-priority task (first one)
-    # has finished in time to release its successors.
-    if idle_group:
-        if idle_group[0] in SP:
-            succ_set = succ_set.union(SP[idle_group[0]]["succ"])
-    
-    return succ_set
-
-
 ######## Utility functions #######
 def extract_single_element(s):
     if not s:  # the set is empty
@@ -186,14 +58,14 @@ class State:
         SP: dict,
         GW: set,
         FT: dict,
-        aux: str = ""
+        FJ: set
     ):
         self.A = A
         self.PP = PP
         self.SP = SP
         self.GW = GW
         self.FT = FT
-        self.aux = aux
+        self.FJ = FJ
 
     def __repr__(self):
         sp_str = "\n".join(
@@ -201,15 +73,9 @@ class State:
             f"{j}: [{self.SP[j]['EFT']}, {self.SP[j]['LFT']}] {self.SP[j]['succ']}, {self.SP[j]['siblings']}, {self.SP[j]['captured']}"
             for j in self.SP
         )
-        ft_str = "\n".join(
-            f"{j}: [{self.FT[j][0]},{self.FT[j][1]}]"
-            for j in self.FT
-        )
-        # return f"{self.A} {self.PP} {self.GW}\n{self.aux}\n{ft_str}"
-        # return f"{self.A} {self.PP}\n{ft_str}\n{self.GW}"
-        # return f"{self.A} {self.PP}\n{sp_str}\n{self.GW}"
-        # return f"{self.A} {self.PP} GWS={self.GW}"
         # return f"{self.A}"
+        # return f"{self.A} {self.PP}\n{sp_str}"
+
         return f"{self.A} {self.PP}"
 
 ################### Algorithm #################
@@ -220,7 +86,7 @@ def ScheduleGraphConstructionAlgorithm(
     JDICT: dict,
     PRED: dict,
     logger=logging.Logger("SAGPY", logging.CRITICAL),
-    merge=False
+    merge = False
 ) -> tuple[nx.DiGraph, dict, dict]:
     def succ(j: str):
         succ_set = set()
@@ -228,7 +94,7 @@ def ScheduleGraphConstructionAlgorithm(
             if j in PRED[k]:
                 succ_set.add(k)
         return succ_set
-    # print("#############", merge)
+
     INF = 10000000000  # Representation for infinity
     G = nx.DiGraph()
     BR = {Ji: INF for Ji in J}
@@ -240,7 +106,7 @@ def ScheduleGraphConstructionAlgorithm(
     LRT0 = min([JDICT[Jy]["r_max"] for Jy in J])
     PP1 = (ERT0, LRT0)
     GW1 = set([j for j in J if len(PRED[j]) == 0 and JDICT[j]["r_max"] <= PP1[0]]) 
-    InitNode = State([(0, 0) for core in range(m)], PP1, dict(), GW1, dict())
+    InitNode = State([(0, 0) for core in range(m)], PP1, dict(), GW1, dict(), set())
     G.add_node(0, state=InitNode)
 
     P = shortestPathFromSourceToLeaf(G)
@@ -251,6 +117,7 @@ def ScheduleGraphConstructionAlgorithm(
         dispatch_order = [G[u][v]["job"] for u, v in zip(P[:-1], P[1:])]
         not_dispatched_jobs = J.difference(J_P)
         v_p = G.nodes[P[-1]]["state"]
+        parent_state = G.nodes[P[-2]]["state"] if v_p != InitNode else None
         last_dispatched_job = G[P[-2]][P[-1]]["job"] if v_p != InitNode else ""
 
         A = v_p.A
@@ -258,72 +125,68 @@ def ScheduleGraphConstructionAlgorithm(
         SP: dict[tuple[set, int, int, bool, bool]] = v_p.SP
         GW: set = v_p.GW
         FT = v_p.FT
-        ALL_POSSIBLE_SUCC = []
-        ALL_FINISH_ORDERINGS = []
+        FJ = v_p.FJ
 
         A1 = A[0]
         A1_min = A1[0]
         A1_max = A1[1]
 
-        def get_new_SP():
-            new_sp = copy.deepcopy(SP)
+        def certainly_in_GWS():
+            def x_th_largest(S: set, x: int):
+                if x < 1 or x > len(S):
+                    raise ValueError("x must be between 1 and the number of elements in S")
+                
+                sorted_elements = sorted(S, key=lambda j: FT[j][1], reverse=True)
+                return FT[sorted_elements[x - 1]][1]
 
-            for j in new_sp:
-                new_sp[j]["captured"] = True
+            B = set([j for j in J_P if FT[j][0] < A1_max and FT[j][1] > A1_min]).difference(FJ)
+            APP = set([j for j in J_P if FT[j][0] >= A1_max]) # jobs that finish After Polling Point
+            CFB = dict() # jobs that Certainly Finish Before job x
 
-            return new_sp
+            for j in B:
+                # Suppose j triggers the polling point
+                CFB[j] = set([j])
 
-        def get_possible_succ():
-            print(f"GET POSSIBLE SUCC AFTER {last_dispatched_job} -- START --")
-            global job_info
-            nonlocal ALL_POSSIBLE_SUCC, ALL_FINISH_ORDERINGS
-            dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
-            # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)
-            job_info = {}
-            for job in dispatch_order:
-                ft_min, ft_max = FT[job]
-                exec_min, exec_max = JDICT[job]["C_min"], JDICT[job]["C_max"]
-                job_info[job] = (ft_min, ft_max, exec_min, exec_max, dispatch_index[job])
-            waiting = tuple(dispatch_order)
-            running = tuple()
-            # dp.cache_clear()
+                for k in B.difference(set([j])):
+                    if FT[k][1] < FT[j][0]:
+                        CFB[j].add(k)
+                        continue
+                    else:
+                        if len(APP) < m - 1:
+                            if FT[k][1] < x_th_largest(B.difference(set([j])), m - 1):
+                                CFB[j].add(k)
+                        else:
+                            continue
             
-            start_time = time.perf_counter()
-            ordering_bounds = dp(0, waiting, running, m)
-            end_time = time.perf_counter()
-            elapsed_time = end_time - start_time
-            with open('results.csv', 'a', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow([len(waiting), elapsed_time])
-            ALL_FINISH_ORDERINGS = ordering_bounds
-
-            possible_succ_under_all_orders = []
-            for order in ordering_bounds:
-                bounds = ordering_bounds[order]
-                certain_succ_for_current_order = compute_certain_successors(m ,dispatch_order, order, bounds, SP)
-                possible_succ_under_all_orders.append(certain_succ_for_current_order)
+            preds = set([j for j in SP if FT[j][1] <= A1_min]).union(set.intersection(*CFB.values())) if CFB else set([j for j in SP if FT[j][1] <= A1_min])
+            D = {e for j in SP if FT[j][1] <= A1_min for e in SP[j]["succ"]}
+            succ_CFB = (
+                {e for j in set.intersection(*CFB.values()) 
+                for e in SP.get(j, {}).get("succ", set())}
+                if CFB else set()
+            )
+            succs = succ_CFB.union(D)
             
-            unique_possible_succ_under_all_orders = {frozenset(s) for s in possible_succ_under_all_orders}
-            ALL_POSSIBLE_SUCC = [set(fs) for fs in unique_possible_succ_under_all_orders]
+            # if last_dispatched_job == "J4_20":
+            # breakpoint()
 
-            # if ALL_POSSIBLE_SUCC == [set()]:
-            if len(J_P) == 0 and v_p != InitNode:
-                print("#### WTF ####")
-                print("merge: ", merge)
-                print("dispatch_order: ", dispatch_order)
-                print("J_P: ", J_P)
-                breakpoint()
-            print(f"GET POSSIBLE SUCC AFTER {last_dispatched_job} -- END --")
+            # all_possible_WS = {frozenset(s) for s in CFB.values()}
+            # print(last_dispatched_job)
+            # print(GW)
+            # all_possible_WS = {e for s in CFB.values() for j in s for e in SP.get(j, {}).get("succ", set())}
+            # breakpoint()
+
+            all_possible_WS = set() ########## TODO: Calculate all possible WS properly, i.e., PWS
+
+            return all_possible_WS, preds, succs
         
+        #########################################
+        all_possible_WS, preds, succs = set(), set(), set()
+        if len(GW) == 0:
+            all_possible_WS, preds, succs = certainly_in_GWS()
+        #########################################
 
         def GWS(pp: tuple[int, int], sp, new_pp = False):
-            certain_gws = set()
-            if new_pp == True:                
-                if len(ALL_POSSIBLE_SUCC) != 0:
-                    certain_gws = set.intersection(*ALL_POSSIBLE_SUCC)
-                else:
-                    certain_gws = set()
-
             pp_min, pp_max = pp
 
             certainly_ready_timer_jobs = set([j for j in not_dispatched_jobs 
@@ -332,15 +195,18 @@ def ScheduleGraphConstructionAlgorithm(
             certainly_ready_sub_jobs = set(s for j in sp.keys() 
                                            if (sp[j]["LFT"] <= pp_min) 
                                            or (sp[j]["siblings"])
+                                        #    or (sp[j]["EFT"] == pp_min and sp[j]["LFT"] == pp_max) # Jelmer's *BAD* idea
                                            for s in sp[j]["succ"]
             )
 
-            result = certainly_ready_timer_jobs.union(certainly_ready_sub_jobs.union(certain_gws))
+            result = certainly_ready_timer_jobs.union(certainly_ready_sub_jobs)
+            # print(last_dispatched_job)
             # breakpoint()
             return result
 
         def RC(k: str, sp):
             return {s for j in SP.keys() if sp[j]["LFT"] <= sp[k]["EFT"] for s in sp[j]["succ"]}
+
 
         # ignore means that we ignore the 'captured' flag
         def PWS(pp, sp):
@@ -361,30 +227,11 @@ def ScheduleGraphConstructionAlgorithm(
 
             sub_sets = set()
             for k in sp:
-                # if [EFT(k), LFT(k)] intersects [pp_min, pp_max] and k is captured
-                if max(sp[k]["EFT"], pp_min) <= min(sp[k]["LFT"], pp_max) and (sp[k]["captured"]):
+                if (max(sp[k]["EFT"], pp_min) <= min(sp[k]["LFT"], pp_max) or sp[k]["LFT"] <= pp_min) and (sp[k]["captured"]):
                     succ_set = set(sp[k]["succ"])
                     sub_sets.add(frozenset((succ_set.union(RC(k, sp)))))
 
             return timer_sets.union(sub_sets)
-
-        # def PWS(pp, sp):
-        #     pp_min, pp_max = pp
-
-        #     timer_sets = set()
-        #     for k in not_dispatched_jobs:
-        #         # if pred(k) is empty and k can be scheduled before pp_max
-        #         if len(PRED[k]) == 0 and JDICT[k]["r_min"] <= pp_max:
-        #             timer_set = set([k])
-        #             other_timers = set(
-        #                 j for j in not_dispatched_jobs
-        #                 if len(PRED[j]) == 0 
-        #                 and JDICT[j]["r_min"] <= pp_max 
-        #                 and JDICT[j]["r_max"] <= JDICT[k]["r_min"]
-        #             )
-        #             timer_sets.add(frozenset(timer_set.union(other_timers)))
-
-        #     return timer_sets.union(sub_sets)
         
         def EWS(GWS_set, PWS_set):
             # breakpoint()
@@ -441,11 +288,6 @@ def ScheduleGraphConstructionAlgorithm(
                     else:
                         SP_vp_prime[pred_j]["siblings"] = True
 
-                # We have a new polling point, so we must set the captured flag for all rows in SP
-                if new_pp:
-                    for r in SP_vp_prime:
-                        SP_vp_prime[r]["captured"] = True
-
                 if len(succ_j) != 0:
                     SP_vp_prime[j] = {
                         "succ": succ_j,
@@ -459,12 +301,13 @@ def ScheduleGraphConstructionAlgorithm(
                     GW_vp_prime = copy.deepcopy(GW) if j not in GW else GW.difference(set([j]))
                 else:
                     GW_vp_prime = new_gws.difference(set([j]))
+                
+                FJ_vp_prime = FJ.union(preds)
 
-                new_state = State(A_vp_prime, PP_vp_prime, SP_vp_prime, GW_vp_prime, FT_vp_prime)
+                new_state = State(A_vp_prime, PP_vp_prime, SP_vp_prime, GW_vp_prime, FT_vp_prime, FJ_vp_prime)
                 new_state_id = get_rand_node_id()
                 G.add_node(new_state_id, state=new_state)
                 G.add_edge(P[-1], new_state_id, job=j, FT=(EFT_j,LFT_j))
-
 
                 '''
                 (safe) MERGE condition:
@@ -495,6 +338,7 @@ def ScheduleGraphConstructionAlgorithm(
                         A_vq = v_q.A
                         GW_vq = v_q.GW
                         PP_vq = v_q.PP
+                        SP_vq = v_q.SP
                         FT_vq = v_q.FT
                         # breakpoint()
                         ###### Merge condition ######
@@ -514,10 +358,13 @@ def ScheduleGraphConstructionAlgorithm(
 
                         if not (max(vp_prime.PP[0], PP_vq[0]) <= min(vp_prime.PP[1], PP_vq[1])):
                             continue
+
+                        if list(SP_vq.keys()) != list(SP_vp_prime.keys()):
+                            continue
                         
                         ############## THIS MIGHT MAKE THE ANALYSIS WRONG/UNSAFE IF LEFT UNCOMMENTED ############
-                        if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
-                            continue
+                        # if list(FT_vq.keys()) != list(vp_prime.FT.keys()):
+                        #     continue
                         
                         ####### Widen intervals #########
                         for x in range(m):
@@ -544,17 +391,14 @@ def ScheduleGraphConstructionAlgorithm(
         #################################################
         ############## ACTUAL ALGORITHM #################
         #################################################
+        # GWS_set_old = GWS(PP_old, SP)
         GWS_set_old = GW
         PWS_set_old = PWS(PP_old, SP)
-        get_possible_succ()
-        # print(last_dispatched_job)
-        # if last_dispatched_job == "J7_28":
-        #     breakpoint()
+        print(last_dispatched_job)
         # breakpoint()
 
         ############# Decision making ###################
         if len(GWS_set_old) != 0:
-        # if len(GW) != 0:
             EWS_old = EWS(GWS_set_old, PWS_set_old)
 
             # Highest-priority jobs over some WS in EWS
@@ -566,13 +410,9 @@ def ScheduleGraphConstructionAlgorithm(
             if len(jobs_to_dispatch_old) == 0:
                 breakpoint()
 
-            # print("GWS != 0")
-            # breakpoint()
             dispatch_jobs(jobs_to_dispatch_old, PP_old)
 
         elif len(GWS_set_old) == 0 and len(PWS_set_old) == 0:
-        # elif len(GW) == 0 and len(PWS_set) == 0:
-            ############ UPDATE PP #############
             if min([SP[j]["EFT"] for j in SP], default=INF) > A1_max:
                 PP_min_new = max(A1_min,
                                 min([JDICT[j]["r_min"] for j in not_dispatched_jobs if len(PRED[j]) == 0], default=0),
@@ -587,30 +427,26 @@ def ScheduleGraphConstructionAlgorithm(
                 PP_max_new = A1_max
 
             PP_new = (PP_min_new, PP_max_new)
-            SP_new = get_new_SP()
-            # get_possible_succ()
+            for j in SP:
+                SP[j]["captured"] = True
+
+            SP_new = SP
             GWS_set_new = GWS(PP_new, SP_new, new_pp = True)
+            GWS_set_new = GWS_set_new.union(succs)
             PWS_set_new = PWS(PP_new, SP_new)
             EWS_new = EWS(GWS_set_new, PWS_set_new)
+            # EWS_new = all_possible_WS
+            breakpoint()
+
             jobs_to_dispatch_new = {
                 min(job_set, key=lambda j: JDICT[j]["p"])
                 for job_set in EWS_new if job_set  # only process non-empty job_set
             }
-            HP_SUCC_in_a_WS = {
-                min(job_set, key=lambda j: JDICT[j]["p"])
-                for job_set in ALL_POSSIBLE_SUCC 
-                if job_set # only process non-empty job_set
-            }
-            # # Filter invalid jobs gotten from the previous equations
-            jobs_to_dispatch_new = {j for j in jobs_to_dispatch_new if (len(PRED[j]) == 0) or (j in HP_SUCC_in_a_WS)}
 
             if len(jobs_to_dispatch_new) == 0:
                 print("######################### (2) ################")
-                # return G, BR, WR
                 breakpoint()
 
-            # print("GWS == 0 and PWS == 0")
-            # breakpoint()
             dispatch_jobs(jobs_to_dispatch_new, PP_new, new_pp = True, new_gws = GWS_set_new)
         
         elif len(GWS_set_old) == 0 and len(PWS_set_old) != 0:
@@ -619,8 +455,6 @@ def ScheduleGraphConstructionAlgorithm(
                 min(job_set, key=lambda j: JDICT[j]["p"])
                 for job_set in EWS_old if job_set  # only process non-empty job_set
             }
-            # print("GWS == 0 and PWS != 0 old")
-            # breakpoint()
             dispatch_jobs(jobs_to_dispatch_old, PP_old)
             
             ############ UPDATE PP #############
@@ -638,24 +472,19 @@ def ScheduleGraphConstructionAlgorithm(
                 PP_max_new = A1_max
 
             PP_new = (PP_min_new, PP_max_new)
-            SP_new = get_new_SP()
-            # get_possible_succ()
+            # SP_new = get_new_SP()
+            for j in SP:
+                SP[j]["captured"] = True
+            SP_new = SP
             GWS_set_new = GWS(PP_new, SP_new, new_pp = True)
+            GWS_set_new = GWS_set_new.union(succs)
             PWS_set_new = PWS(PP_new, SP_new)
             EWS_new = EWS(GWS_set_new, PWS_set_new)
-            HP_SUCC_in_a_WS = {
-                min(job_set, key=lambda j: JDICT[j]["p"])
-                for job_set in ALL_POSSIBLE_SUCC 
-                if job_set # only process non-empty job_set
-            }
+            # EWS_new = all_possible_WS
             jobs_to_dispatch_new = {
                 min(job_set, key=lambda j: JDICT[j]["p"])
-                for job_set in EWS_new 
-                if job_set # only process non-empty job_set
+                for job_set in EWS_new if job_set  # only process non-empty job_set
             }
-            jobs_to_dispatch_new = {j for j in jobs_to_dispatch_new if (len(PRED[j]) == 0) or (j in HP_SUCC_in_a_WS)}
-            # print("GWS == 0 and PWS != 0 new")
-            # breakpoint()
             dispatch_jobs(jobs_to_dispatch_new, PP_new, new_pp = True, new_gws = GWS_set_new)
             
             if len(jobs_to_dispatch_old) == 0 or len(jobs_to_dispatch_new) == 0:
@@ -663,10 +492,7 @@ def ScheduleGraphConstructionAlgorithm(
                 breakpoint()
 
         # Next iteration
-        logger.info(f"MAX PATH LENGTH = {len(P)} and the graph has {G.number_of_nodes()} vertices")
+        logger.info(f"Max path length: {len(P)},  Number of nodes in graph : {counter}")
         P = shortestPathFromSourceToLeaf(G)
-
-        # if (len(P) == 13):
-        #     break
 
     return G, BR, WR

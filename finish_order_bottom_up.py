@@ -142,7 +142,7 @@ def main():
         {"id": "t2", "ft": (6, 14),  "exec_range": (1, 3)},
         {"id": "t3", "ft": (8, 18),  "exec_range": (2, 4)},
         {"id": "t7", "ft": (14, 30), "exec_range": (6, 12)},
-        {"id": "t4", "ft": (13, 28), "exec_range": (2, 5)},
+        # {"id": "t4", "ft": (13, 28), "exec_range": (2, 5)},
         # # {"id": "t8", "ft": (19, 40), "exec_range": (6, 12)},
         # {"id": "t10", "ft": (31, 64), "exec_range": (20, 41)},
         # {"id": "t5", "ft": (22, 46), "exec_range": (3, 6)},
@@ -162,7 +162,7 @@ def main():
     m = 2  # number of cores
 
     # Known dispatch order.
-    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7", "t4"]#, "t10"]#, "t5"]#, "t1_2"]
+    dispatch_order = ["t1", "t6", "t9", "t2", "t3", "t7"]#, "t4"]#, "t10"]#, "t5"]#, "t1_2"]
     dispatch_index = {tid: idx for idx, tid in enumerate(dispatch_order)}
     
     # Build tasks_info: mapping task id -> (ft_min, ft_max, exec_min, exec_max, dispatch)
